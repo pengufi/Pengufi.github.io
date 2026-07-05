@@ -497,13 +497,31 @@ function loadIndexFromUrl(){
   fetch(INDEX_URL)
     .then(res => { if(!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
     .then(async data => {
-      if(Array.isArray(data)) indexData = data;
-      else if(data && Array.isArray(data.collection)) indexData = data.collection;
-      else if(data && Array.isArray(data.nfts)) indexData = data.nfts;
-      else{
-        const firstKey = data ? Object.keys(data)[0] : null;
-        if(firstKey && Array.isArray(data[firstKey])) indexData = data[firstKey];
-        else throw new Error('Unrecognized index format');
+      if(Array.isArray(data)){
+        indexData = data;
+      } else if(data && Array.isArray(data.collection)){
+        indexData = data.collection;
+      } else if(data && Array.isArray(data.nfts)){
+        indexData = data.nfts;
+      } else if(data && typeof data === 'object'){
+        const topLevelArray = Object.values(data).find(v => Array.isArray(v));
+        const values = Object.entries(data).map(([key, val]) => {
+          if(val && typeof val === 'object' && !Array.isArray(val)){
+            return { token_id: val.tokenId ?? val.token_id ?? val.id ?? key, ...val };
+          }
+          return val;
+        });
+        if(topLevelArray){
+          // rare case: { "someKey": [ ...entries ] }
+          indexData = topLevelArray;
+        } else if(values.length > 0 && values.every(v => v && typeof v === 'object' && Array.isArray(v.attributes))){
+          // object keyed by token id -> { "160": { tokenId, attributes: [...] }, ... }
+          indexData = values;
+        } else {
+          throw new Error('Unrecognized index format');
+        }
+      } else {
+        throw new Error('Unrecognized index format');
       }
       await saveIndexCache();
       updateIndexStatus('loaded', indexData.length);
