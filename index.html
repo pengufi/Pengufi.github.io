@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>V2 Dickbutts — NFT Builder (SVG + IPFS + GitHub)</title>
+  <title>V2 Dickbutts — NFT Builder (PNG Upload + IPFS + GitHub)</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -336,6 +336,30 @@
     
     .male-bg { background: rgba(37,99,235,0.08); }
     .female-bg { background: rgba(236,72,153,0.08); }
+
+    .drop-zone {
+      border: 2px dashed var(--border2);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: rgba(124,58,237,0.04);
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--neon2);
+      background: rgba(124,58,237,0.1);
+    }
+    .drop-zone .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+    .drop-zone p { font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+    .file-name {
+      background: rgba(124,58,237,0.12);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: inline-block;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -345,7 +369,7 @@
       <span class="logo-pulse"></span>
       <h1 class="logo-text">V2 DICKBUTTS</h1>
     </div>
-    <span class="font-raj text-xs uppercase tracking-widest text-muted">SVG · IPFS · GitHub</span>
+    <span class="font-raj text-xs uppercase tracking-widest text-muted">PNG · IPFS · GitHub</span>
   </header>
 
   <div class="tabs-bar">
@@ -357,58 +381,68 @@
   <div style="flex:1;overflow:auto">
     <div id="panel-layers" class="panel">
       <div class="glass-card">
-        <div class="mode-switch">
-          <div id="mode-url" class="mode-btn active" onclick="App.setMode('url')">🌐 Image URL</div>
-          <div id="mode-svg" class="mode-btn" onclick="App.setMode('svg')">🎨 SVG Code</div>
-        </div>
-        
-        <div id="url-mode">
-          <div style="display:flex;flex-direction:column;gap:12px">
-            <input type="text" id="image-url" placeholder="GitHub RAW / IPFS URL / Any image URL" class="nft-input">
-            <div style="display:flex;gap:12px">
-              <input type="text" id="url-value" placeholder="Value (e.g., Red Hair)" class="nft-input" style="flex:1">
-              <select id="url-section" class="nft-input" style="flex:1">
-                <option value="Background">Background</option><option value="Body">Body</option><option value="Butt">Butt</option>
-                <option value="Dick">Dick</option><option value="Eyes">Eyes</option><option value="Hand">Hand</option>
-                <option value="Hat">Hat</option><option value="Mouth">Mouth</option><option value="Nose">Nose</option>
-                <option value="Shoes">Shoes</option><option value="Skin">Skin</option><option value="Special">Special</option>
-              </select>
+        <!-- PNG Upload Section -->
+        <div id="upload-mode">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <!-- Drop Zone -->
+            <div id="drop-zone" class="drop-zone" 
+                 ondragover="App.handleDragOver(event)" 
+                 ondrop="App.handleDrop(event)"
+                 onclick="document.getElementById('file-input').click()">
+              <span class="icon">📤</span>
+              <p>Drop PNG image here or click to upload</p>
+              <p class="text-xs text-muted mt-1">PNG, JPG, GIF, WebP supported • Max 5MB</p>
+              <input type="file" id="file-input" accept="image/*" style="display:none" 
+                     onchange="App.handleFileUpload(event)">
             </div>
-            <button onclick="App.addLayerFromUrl()" class="btn-primary">➕ Add URL Layer</button>
-          </div>
-        </div>
 
-        <div id="svg-mode" style="display:none">
-          <div style="display:flex;flex-direction:column;gap:12px">
-            <textarea id="svg-code" rows="6" class="svg-input" placeholder='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <circle cx="256" cy="256" r="200" fill="#7c3aed"/>
-  <circle cx="256" cy="256" r="150" fill="#a855f7"/>
-  <circle cx="256" cy="256" r="80" fill="#ec4899"/>
-</svg>'></textarea>
-            <div style="display:flex;gap:12px">
-              <input type="text" id="svg-value" placeholder="Value (e.g., Purple Circles)" class="nft-input" style="flex:1">
-              <select id="svg-section" class="nft-input" style="flex:1">
-                <option value="Background">Background</option><option value="Body">Body</option><option value="Butt">Butt</option>
-                <option value="Dick">Dick</option><option value="Eyes">Eyes</option><option value="Hand">Hand</option>
-                <option value="Hat">Hat</option><option value="Mouth">Mouth</option><option value="Nose">Nose</option>
-                <option value="Shoes">Shoes</option><option value="Skin">Skin</option><option value="Special">Special</option>
+            <!-- Uploaded file info -->
+            <div id="file-info" style="display:none;background:rgba(124,58,237,0.08);border-radius:8px;padding:12px 16px">
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span id="file-preview" style="font-size:24px">🖼️</span>
+                <span id="file-name-display" style="font-weight:600;color:var(--highlight)"></span>
+                <span id="file-size-display" class="text-xs text-muted"></span>
+                <button onclick="App.clearFile()" class="btn-sm btn-danger">✕ Remove</button>
+              </div>
+            </div>
+
+            <!-- Layer details -->
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              <input type="text" id="layer-name" placeholder="Layer name (auto-filled from filename)" class="nft-input" style="flex:2;min-width:160px">
+              <select id="layer-section" class="nft-input" style="flex:1;min-width:120px">
+                <option value="Background">Background</option>
+                <option value="Body">Body</option>
+                <option value="Butt">Butt</option>
+                <option value="Dick">Dick</option>
+                <option value="Eyes">Eyes</option>
+                <option value="Hand">Hand</option>
+                <option value="Hat">Hat</option>
+                <option value="Mouth">Mouth</option>
+                <option value="Nose">Nose</option>
+                <option value="Shoes">Shoes</option>
+                <option value="Skin">Skin</option>
+                <option value="Special">Special</option>
               </select>
             </div>
+
             <div style="display:flex;gap:16px">
-              <label class="gender-label"><input type="radio" name="svg-gender" value="male" checked> ♂ Male</label>
-              <label class="gender-label"><input type="radio" name="svg-gender" value="female"> ♀ Female</label>
+              <label class="gender-label"><input type="radio" name="upload-gender" value="male" checked> ♂ Male</label>
+              <label class="gender-label"><input type="radio" name="upload-gender" value="female"> ♀ Female</label>
             </div>
-            <button onclick="App.addLayerFromSvg()" class="btn-primary">➕ Add SVG Layer</button>
+
+            <button onclick="App.addLayerFromUpload()" id="btn-add-layer" class="btn-primary" disabled>
+              ➕ Add Layer
+            </button>
           </div>
         </div>
       </div>
 
       <div class="info-strip mt-4">
-        💡 <span>SVG Tip:</span> Use viewBox="0 0 512 512" for best results. SVG automatically converts to PNG and saves permanently.
+        💡 <span>PNG Upload:</span> Upload PNG images directly. They are stored in your browser's local storage and persist after refresh.
       </div>
 
       <div id="sections-container" class="space-y-3 mt-4"></div>
-      <p id="layers-empty" class="empty-state">No layers yet.<br>Add URL or SVG layers above.</p>
+      <p id="layers-empty" class="empty-state">No layers yet.<br>Upload PNG images above.</p>
     </div>
 
     <div id="panel-create" class="panel hidden">
@@ -448,63 +482,17 @@ let layersBySection = {
 };
 let selectedOrder = [];
 let nfts = [];
-let currentMode = 'url';
-let previewCanvas = null, previewCtx = null;
 let openSectionLayers = {};
 let openSectionCreate = {};
+let uploadedFileData = null;
+let uploadedFileName = '';
 
 const SECTIONS = ["Background","Body","Butt","Dick","Eyes","Hand","Hat","Mouth","Nose","Shoes","Skin","Special"];
+let previewCanvas = null, previewCtx = null;
 
 function escapeHtml(str) {
   if(!str) return '';
   return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-}
-
-function normalizeImageUrl(raw) {
-  let url = raw.trim();
-  if(!url) return '';
-  if(url.includes('github.com') && url.includes('/blob/')) {
-    url = url.replace('github.com','raw.githubusercontent.com').replace('/blob/','/');
-  }
-  if(url.includes('ipfs/') && !url.startsWith('http')) {
-    url = 'https://ipfs.io/ipfs/' + url.split('ipfs/')[1];
-  }
-  if(url.startsWith('ipfs://')) {
-    url = 'https://ipfs.io/ipfs/' + url.substring(7);
-  }
-  if(/^Qm[a-zA-Z0-9]{44,}\//.test(url)) {
-    url = 'https://ipfs.io/ipfs/' + url;
-  }
-  return url;
-}
-
-function compressSvgForStorage(svgString) {
-  // Compress SVG by removing unnecessary whitespace
-  let compressed = svgString
-    .replace(/>\s+</g, '><')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return compressed;
-}
-
-function svgToDataUrl(svgString) {
-  // Ensure proper SVG structure
-  let fixedSvg = svgString;
-  
-  if (!fixedSvg.includes('xmlns="http://www.w3.org/2000/svg"')) {
-    fixedSvg = fixedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-  }
-  
-  if (!fixedSvg.includes('viewBox')) {
-    fixedSvg = fixedSvg.replace('<svg', '<svg viewBox="0 0 512 512"');
-  }
-  
-  if (!fixedSvg.includes('width="512"')) {
-    fixedSvg = fixedSvg.replace('<svg', '<svg width="512" height="512"');
-  }
-  
-  const encodedSvg = encodeURIComponent(fixedSvg);
-  return 'data:image/svg+xml,' + encodedSvg;
 }
 
 function showToast(msg) {
@@ -517,17 +505,11 @@ function showToast(msg) {
 
 function saveToStorage() {
   try {
-    // Create a clean copy for storage
     const storageLayers = {};
     for(let section in layersBySection) {
       storageLayers[section] = layersBySection[section].map(layer => {
         const copy = { ...layer };
-        // For SVG layers, store the raw SVG code instead of data URL
-        if(layer.type === 'svg' && layer.svgRaw) {
-          copy.svgRaw = compressSvgForStorage(layer.svgRaw);
-          // Remove imageUrl from storage (will regenerate on load)
-          delete copy.imageUrl;
-        }
+        // Keep imageUrl as data URL for persistence
         return copy;
       });
     }
@@ -548,16 +530,7 @@ function loadFromStorage() {
       const storedLayers = JSON.parse(layers);
       for(let section in storedLayers) {
         if(layersBySection[section]) {
-          layersBySection[section] = storedLayers[section].map(layer => {
-            // Regenerate imageUrl for SVG layers
-            if(layer.type === 'svg' && layer.svgRaw) {
-              return {
-                ...layer,
-                imageUrl: svgToDataUrl(layer.svgRaw)
-              };
-            }
-            return layer;
-          });
+          layersBySection[section] = storedLayers[section];
         }
       }
     }
@@ -565,7 +538,6 @@ function loadFromStorage() {
     for(let sec of SECTIONS) if(!layersBySection[sec]) layersBySection[sec] = [];
   } catch(e) { 
     console.warn('Load error:', e); 
-    // If error, reset to empty
     for(let sec of SECTIONS) layersBySection[sec] = [];
   }
 }
@@ -610,79 +582,117 @@ async function updateLivePreview() {
   }
 }
 
-function addLayerFromUrl() {
-  const url = document.getElementById('image-url').value.trim();
-  const value = document.getElementById('url-value').value.trim();
-  const section = document.getElementById('url-section').value;
-  if(!url) { showToast('Enter image URL'); return; }
-  if(!value) { showToast('Enter value'); return; }
-  const finalUrl = normalizeImageUrl(url);
-  const newLayer = { 
-    id: Date.now() + '_' + Math.random(), 
-    value, 
-    imageUrl: finalUrl, 
-    gender: 'male', 
-    type: 'url' 
-  };
-  const img = new Image();
-  img.onload = () => {
-    layersBySection[section].push(newLayer);
-    saveToStorage();
-    renderSections();
-    renderCreateSections();
-    showToast(`✅ Added "${value}" to ${section}`);
-    document.getElementById('image-url').value = '';
-    document.getElementById('url-value').value = '';
-  };
-  img.onerror = () => showToast('❌ Failed to load image');
-  img.src = finalUrl;
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  processFile(file);
+  event.target.value = '';
 }
 
-function addLayerFromSvg() {
-  let svgCode = document.getElementById('svg-code').value.trim();
-  const value = document.getElementById('svg-value').value.trim();
-  const section = document.getElementById('svg-section').value;
-  const radios = document.getElementsByName('svg-gender');
-  let gender = 'male';
-  for(let r of radios) if(r.checked) gender = r.value;
-  
-  if(!svgCode) { showToast('Enter SVG code'); return; }
-  if(!value) { showToast('Enter value'); return; }
-  
-  // Validate SVG
-  if (!svgCode.includes('<svg')) {
-    showToast('❌ Invalid SVG: No <svg> tag found');
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  document.getElementById('drop-zone').classList.add('dragover');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    processFile(files[0]);
+  }
+}
+
+function processFile(file) {
+  // Check file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('❌ File too large! Max 5MB');
     return;
   }
   
-  // Store the compressed SVG raw
-  const compressedSvg = compressSvgForStorage(svgCode);
-  const svgDataUrl = svgToDataUrl(compressedSvg);
+  // Check file type
+  if (!file.type.startsWith('image/')) {
+    showToast('❌ Please upload an image file');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const imageDataUrl = e.target.result;
+    
+    // Validate image
+    const img = new Image();
+    img.onload = function() {
+      uploadedFileData = imageDataUrl;
+      uploadedFileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      
+      // Show file info
+      document.getElementById('file-info').style.display = 'block';
+      document.getElementById('file-name-display').textContent = uploadedFileName;
+      document.getElementById('file-size-display').textContent = (file.size / 1024).toFixed(1) + ' KB';
+      document.getElementById('file-preview').textContent = '🖼️';
+      
+      // Auto-fill layer name
+      document.getElementById('layer-name').value = uploadedFileName;
+      
+      // Enable add button
+      document.getElementById('btn-add-layer').disabled = false;
+      
+      showToast('✅ Image loaded! Set layer details and add.');
+    };
+    img.onerror = function() {
+      showToast('❌ Invalid image file');
+    };
+    img.src = imageDataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFile() {
+  uploadedFileData = null;
+  uploadedFileName = '';
+  document.getElementById('file-info').style.display = 'none';
+  document.getElementById('file-name-display').textContent = '';
+  document.getElementById('file-size-display').textContent = '';
+  document.getElementById('layer-name').value = '';
+  document.getElementById('btn-add-layer').disabled = true;
+  document.getElementById('file-input').value = '';
+}
+
+function addLayerFromUpload() {
+  if (!uploadedFileData) {
+    showToast('❌ Please upload an image first');
+    return;
+  }
   
+  const name = document.getElementById('layer-name').value.trim();
+  const section = document.getElementById('layer-section').value;
+  const radios = document.getElementsByName('upload-gender');
+  let gender = 'male';
+  for(let r of radios) if(r.checked) gender = r.value;
+  
+  if (!name) {
+    showToast('❌ Please enter a layer name');
+    return;
+  }
+
   const newLayer = { 
-    id: Date.now() + '_' + Math.random(), 
-    value, 
-    imageUrl: svgDataUrl,
-    gender, 
-    type: 'svg', 
-    svgRaw: compressedSvg
+    id: Date.now() + '_' + Math.random().toString(36).substr(2, 6), 
+    value: name, 
+    imageUrl: uploadedFileData, 
+    gender: gender, 
+    type: 'png'
   };
   
-  const img = new Image();
-  img.onload = () => {
-    layersBySection[section].push(newLayer);
-    saveToStorage();
-    renderSections();
-    renderCreateSections();
-    showToast(`✅ Added SVG "${value}" to ${section}`);
-    document.getElementById('svg-code').value = '';
-    document.getElementById('svg-value').value = '';
-  };
-  img.onerror = (err) => { 
-    console.error('SVG load error:', err);
-    showToast('❌ Invalid SVG code. Please check syntax.');
-  };
-  img.src = svgDataUrl;
+  layersBySection[section].push(newLayer);
+  saveToStorage();
+  renderSections();
+  renderCreateSections();
+  showToast(`✅ Added "${name}" to ${section}`);
+  
+  // Clear the upload
+  clearFile();
 }
 
 function deleteLayer(section, layerId) {
@@ -804,7 +814,7 @@ function renderCreateSections() {
   }
   
   if(!hasAny) {
-    container.innerHTML = '<div class="empty-state">No layers added yet.<br>Go to Layers tab and add layers.</div>';
+    container.innerHTML = '<div class="empty-state">No layers added yet.<br>Go to Layers tab and upload PNG images.</div>';
   } else {
     container.innerHTML = html;
   }
@@ -939,14 +949,6 @@ function deleteNFT(id) {
   }
 }
 
-function setMode(mode) {
-  currentMode = mode;
-  document.getElementById('mode-url').classList.toggle('active', mode === 'url');
-  document.getElementById('mode-svg').classList.toggle('active', mode === 'svg');
-  document.getElementById('url-mode').style.display = mode === 'url' ? 'block' : 'none';
-  document.getElementById('svg-mode').style.display = mode === 'svg' ? 'block' : 'none';
-}
-
 function switchTab(tab) {
   document.getElementById('panel-layers').classList.toggle('hidden', tab !== 'layers');
   document.getElementById('panel-create').classList.toggle('hidden', tab !== 'create');
@@ -971,14 +973,36 @@ function init() {
   renderSections();
   renderCreateSections();
   renderCollection();
-  setMode('url');
+  // Clear any existing file state
+  clearFile();
 }
 
 window.App = {
-  switchTab, setMode, addLayerFromUrl, addLayerFromSvg, deleteLayer,
-  toggleSectionLayers, toggleSectionCreate, selectLayer, createNFT,
-  viewMetadata, downloadJSON, downloadImage, deleteNFT
+  switchTab, 
+  handleFileUpload, 
+  handleDragOver, 
+  handleDrop,
+  handleFileUpload,
+  clearFile,
+  addLayerFromUpload,
+  deleteLayer,
+  toggleSectionLayers, 
+  toggleSectionCreate, 
+  selectLayer, 
+  createNFT,
+  viewMetadata, 
+  downloadJSON, 
+  downloadImage, 
+  deleteNFT
 };
+
+// Add drag leave event
+document.addEventListener('DOMContentLoaded', function() {
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.addEventListener('dragleave', function(e) {
+    this.classList.remove('dragover');
+  });
+});
 
 init();
 </script>
