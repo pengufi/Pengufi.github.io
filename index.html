@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>Registry — Trait Compositor & Index Matcher</title>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -71,7 +74,7 @@
     border:1px solid var(--line);border-radius:var(--radius);
     padding:20px;position:relative;
   }
-  .plate::before{ /* registration corner tick */
+  .plate::before{
     content:'';position:absolute;top:8px;left:8px;width:8px;height:8px;
     border-left:1px solid var(--line2);border-top:1px solid var(--line2);
   }
@@ -135,7 +138,6 @@
   }
   .hint-strip b{color:var(--amber2);}
 
-  /* ---------- section (accordion) ---------- */
   .section-card{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:10px;background:var(--ink2);}
   .section-head{
     display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer;user-select:none;
@@ -168,7 +170,6 @@
     box-shadow:0 0 0 2px var(--ink2);
   }
 
-  /* ---------- create tab ---------- */
   .preview-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
   .preview-canvas{border:1px solid var(--line2);border-radius:var(--radius);background:var(--ink);}
   .order-chip-row{display:flex;flex-wrap:wrap;gap:6px;}
@@ -178,7 +179,6 @@
   }
   .order-chip .idx{color:var(--amber2);font-family:'IBM Plex Mono',monospace;font-weight:700;}
 
-  /* ---------- collection ---------- */
   .nft-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px;}
   .nft-card{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--ink2);cursor:pointer;transition:border-color .2s;}
   .nft-card:hover{border-color:var(--line2);}
@@ -190,7 +190,6 @@
   .nft-card .match-line{font-size:11px;color:var(--teal);margin-top:5px;font-family:'IBM Plex Mono',monospace;}
   .nft-card .actions{display:flex;gap:6px;margin-top:10px;}
 
-  /* ---------- index tab ---------- */
   .idx-url-bar{
     display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:rgba(0,0,0,0.2);
     border-radius:var(--radius);padding:9px 12px;margin-top:10px;
@@ -233,7 +232,6 @@
   .flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
   .space-y-3 > * + *{margin-top:10px;}
 
-  /* ---------- metadata modal ---------- */
   .modal-overlay{
     position:fixed;inset:0;background:rgba(6,5,3,0.72);backdrop-filter:blur(3px);
     display:flex;align-items:flex-start;justify-content:center;
@@ -280,7 +278,7 @@
       <div class="mark"></div>
       <div>
         <h1 class="disp">REGISTRY</h1>
-        <div class="sub">Trait Compositor</div>
+        <div class="sub">Trait Compositor · Firebase</div>
       </div>
     </div>
     <span class="mono text-xs" style="color:var(--paper-dim)">PNG · SVG · IDX MATCH</span>
@@ -294,7 +292,6 @@
   </div>
 
   <div style="flex:1">
-    <!-- LAYERS -->
     <div id="panel-layers" class="panel">
       <div class="plate">
         <div class="eyebrow">Upload</div>
@@ -343,7 +340,7 @@
 
       <div class="hint-strip mt-4">
         <span>◆</span>
-        <span><b>Naming:</b> layer names are auto-capitalized so they line up exactly with trait values in your index.json for matching.</span>
+        <span><b>Firebase:</b> layers are stored in Realtime Database and persist until deleted.</span>
       </div>
 
       <div id="sections-container" class="space-y-3 mt-4"></div>
@@ -352,7 +349,6 @@
       </div>
     </div>
 
-    <!-- CREATE -->
     <div id="panel-create" class="panel hidden">
       <div class="plate preview-wrap">
         <canvas id="live-preview-canvas" width="512" height="512" class="preview-canvas" style="width:260px;height:260px"></canvas>
@@ -374,13 +370,11 @@
       <button id="btn-create-nft" class="btn btn-amber btn-block btn-big mt-4">Generate NFT</button>
     </div>
 
-    <!-- COLLECTION -->
     <div id="panel-collection" class="panel hidden">
       <div id="nft-list" class="nft-grid"></div>
       <div id="nft-empty" class="empty-state hidden"><span class="big">◇</span>No NFTs generated yet.</div>
     </div>
 
-    <!-- INDEX -->
     <div id="panel-index" class="panel hidden">
       <div class="plate">
         <div class="flex-between">
@@ -428,6 +422,23 @@
 
 <script>
 // ============================================================
+// FIREBASE CONFIG & INIT
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyCd4hlMTD7_iLhBUh7H9aINoPgb_7BbE7k",
+  authDomain: "punktt-3872b.firebaseapp.com",
+  databaseURL: "https://punktt-3872b-default-rtdb.firebaseio.com",
+  projectId: "punktt-3872b",
+  storageBucket: "punktt-3872b.firebasestorage.app",
+  messagingSenderId: "748701108776",
+  appId: "1:748701108776:web:76f64db670f2f4831b431d",
+  measurementId: "G-DP835T7G35"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ============================================================
 // CONFIG
 // ============================================================
 const INDEX_URL = 'https://raw.githubusercontent.com/pengufi/Pengufi.github.io/main/index_clean.json';
@@ -439,7 +450,7 @@ const TRAIT_SECTIONS = ["Body","Butt","Dick","Eyes","Hand","Hat","Mouth","Nose",
 // ============================================================
 let layersBySection = Object.fromEntries(SECTIONS.map(s => [s, []]));
 let selectedOrder = [];
-let nfts = [];             // [{id, name, description, image, attributes, matchedTokenId, matchPercentage}]
+let nfts = [];
 let openSectionLayers = {};
 let openSectionCreate = {};
 let uploadedFileData = null;
@@ -474,62 +485,69 @@ function updateIndexStatus(status, count = null){
 }
 
 // ============================================================
-// PERSISTENT STORAGE (browser localStorage)
+// FIREBASE HELPERS
 // ============================================================
-const STORAGE_PREFIX = 'registry:';
-async function storageSet(key, value){
-  try{
-    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
-    return true;
-  }catch(e){ console.error('storage.set failed', key, e); return false; }
-}
-async function storageGet(key){
-  try{
-    const raw = localStorage.getItem(STORAGE_PREFIX + key);
-    return raw ? JSON.parse(raw) : null;
-  }catch(e){ return null; }
-}
-async function storageDelete(key){
-  try{ localStorage.removeItem(STORAGE_PREFIX + key); }catch(e){ /* ignore */ }
-}
+function fbLayerRef(section) { return db.ref('layers/' + section); }
+function fbNftRef(id) { return db.ref('nfts/' + id); }
+function fbNftIdsRef() { return db.ref('nftIds'); }
 
-async function saveSectionLayers(section){
-  const ok = await storageSet(`layers:${section}`, layersBySection[section]);
-  if(!ok) showToast('⚠️ Could not save — storage may be full for this section.');
-}
-
-async function loadAllLayers(){
-  for(const section of SECTIONS){
-    const data = await storageGet(`layers:${section}`);
-    layersBySection[section] = Array.isArray(data) ? data : [];
+async function loadAllLayersFromFirebase(){
+  try{
+    const snap = await db.ref('layers').once('value');
+    const data = snap.val() || {};
+    for(const section of SECTIONS){
+      layersBySection[section] = data[section] ? Object.values(data[section]) : [];
+    }
+    renderSections();
+    renderCreateSections();
+    renderIndexMatches();
+  }catch(e){
+    showToast('Failed to load layers from Firebase');
   }
 }
 
-async function saveNftIds(){ await storageSet('nft-ids', nfts.map(n => n.id)); }
-async function saveNft(nft){
-  const ok = await storageSet(`nft:${nft.id}`, nft);
-  if(!ok) showToast('⚠️ Could not save NFT — it may be too large for storage.');
+async function saveLayerToFirebase(section, layer){
+  const ref = fbLayerRef(section);
+  const snap = await ref.once('value');
+  let current = snap.val() || {};
+  current[layer.id] = layer;
+  await ref.set(current);
 }
-async function deleteNftStorage(id){ await storageDelete(`nft:${id}`); }
 
-async function loadAllNfts(){
-  const ids = await storageGet('nft-ids');
-  if(!Array.isArray(ids)){ nfts = []; return; }
-  const loaded = [];
-  for(const id of ids){
-    const n = await storageGet(`nft:${id}`);
-    if(n) loaded.push(n);
+async function deleteLayerFromFirebase(section, layerId){
+  const ref = fbLayerRef(section);
+  const snap = await ref.once('value');
+  let current = snap.val() || {};
+  delete current[layerId];
+  await ref.set(current);
+}
+
+async function loadAllNftsFromFirebase(){
+  try{
+    const snap = await db.ref('nfts').once('value');
+    const data = snap.val() || {};
+    nfts = Object.values(data);
+    renderCollection();
+  }catch(e){
+    showToast('Failed to load NFTs from Firebase');
   }
-  nfts = loaded;
 }
 
-async function saveIndexCache(){
-  const ok = await storageSet('index-cache', indexData);
-  if(!ok) console.warn('Index too large to cache locally — will re-fetch next time.');
+async function saveNftToFirebase(nft){
+  await fbNftRef(nft.id).set(nft);
+  // also update ids list
+  const idsSnap = await fbNftIdsRef().once('value');
+  let ids = idsSnap.val() || [];
+  if(!ids.includes(nft.id)) ids.push(nft.id);
+  await fbNftIdsRef().set(ids);
 }
-async function loadIndexCache(){
-  const data = await storageGet('index-cache');
-  if(Array.isArray(data)) indexData = data;
+
+async function deleteNftFromFirebase(id){
+  await fbNftRef(id).remove();
+  const idsSnap = await fbNftIdsRef().once('value');
+  let ids = idsSnap.val() || [];
+  ids = ids.filter(i => i !== id);
+  await fbNftIdsRef().set(ids);
 }
 
 // ============================================================
@@ -544,31 +562,21 @@ function loadIndexFromUrl(){
   fetch(INDEX_URL)
     .then(res => { if(!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
     .then(async data => {
-      if(Array.isArray(data)){
-        indexData = data;
-      } else if(data && Array.isArray(data.collection)){
-        indexData = data.collection;
-      } else if(data && Array.isArray(data.nfts)){
-        indexData = data.nfts;
-      } else if(data && typeof data === 'object'){
-        const topLevelArray = Object.values(data).find(v => Array.isArray(v));
+      if(Array.isArray(data)) indexData = data;
+      else if(data && Array.isArray(data.collection)) indexData = data.collection;
+      else if(data && Array.isArray(data.nfts)) indexData = data.nfts;
+      else if(data && typeof data === 'object'){
         const values = Object.entries(data).map(([key, val]) => {
           if(val && typeof val === 'object' && !Array.isArray(val)){
             return { token_id: val.tokenId ?? val.token_id ?? val.id ?? key, ...val };
           }
           return val;
         });
-        if(topLevelArray){
-          indexData = topLevelArray;
-        } else if(values.length > 0 && values.every(v => v && typeof v === 'object' && Array.isArray(v.attributes))){
-          indexData = values;
-        } else {
-          throw new Error('Unrecognized index format');
-        }
-      } else {
-        throw new Error('Unrecognized index format');
-      }
-      await saveIndexCache();
+        const topLevelArray = Object.values(data).find(v => Array.isArray(v));
+        if(topLevelArray) indexData = topLevelArray;
+        else if(values.length > 0 && values.every(v => v && typeof v === 'object' && Array.isArray(v.attributes))) indexData = values;
+        else throw new Error('Unrecognized index format');
+      } else throw new Error('Unrecognized index format');
       updateIndexStatus('loaded', indexData.length);
       showToast(`Index loaded — ${indexData.length} entries`);
       renderIndexMatches();
@@ -583,7 +591,6 @@ function loadIndexFromUrl(){
 
 async function clearIndex(){
   indexData = [];
-  await storageDelete('index-cache');
   updateIndexStatus('empty', 0);
   document.getElementById('index-match-results').innerHTML = '';
   showToast('Index cleared');
@@ -749,7 +756,6 @@ function processFile(file){
       uploadedFileData = imageDataUrl;
       uploadedFileName = file.name.replace(/\.[^/.]+$/, '');
       const capitalizedName = capitalizeFirst(uploadedFileName);
-
       document.getElementById('file-info').classList.remove('hidden');
       document.getElementById('file-preview-img').src = imageDataUrl;
       document.getElementById('file-name-display').textContent = capitalizedName;
@@ -759,7 +765,6 @@ function processFile(file){
       showToast('Image loaded — set details and add');
     };
     img.onerror = () => {
-      // some SVGs might not render as image, but we still accept them
       uploadedFileData = imageDataUrl;
       uploadedFileName = file.name.replace(/\.[^/.]+$/, '');
       const capitalizedName = capitalizeFirst(uploadedFileName);
@@ -800,8 +805,8 @@ async function addLayerFromUpload(){
   const capitalizedName = capitalizeFirst(name);
   const newLayer = { id: uid(), value: capitalizedName, imageUrl: uploadedFileData, gender, type: 'image' };
 
+  await saveLayerToFirebase(section, newLayer);
   layersBySection[section].push(newLayer);
-  await saveSectionLayers(section);
   renderSections();
   renderCreateSections();
   renderIndexMatches();
@@ -811,10 +816,10 @@ async function addLayerFromUpload(){
 
 async function deleteLayer(section, layerId){
   if(!confirm('Delete this layer?')) return;
+  await deleteLayerFromFirebase(section, layerId);
   layersBySection[section] = layersBySection[section].filter(l => String(l.id) !== String(layerId));
   selectedOrder = selectedOrder.filter(item => String(item.layerId) !== String(layerId));
   selectedOrder.forEach((item, idx) => item.order = idx + 1);
-  await saveSectionLayers(section);
   renderSections();
   renderCreateSections();
   updateOrderPreview();
@@ -996,8 +1001,7 @@ async function createNFT(){
       matchedTokenId, matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0
     };
     nfts.push(nft);
-    await saveNft(nft);
-    await saveNftIds();
+    await saveNftToFirebase(nft);
 
     selectedOrder = [];
     renderCreateSections();
@@ -1101,8 +1105,7 @@ function downloadImage(id){
 async function deleteNFT(id){
   if(!confirm('Delete this NFT?')) return;
   nfts = nfts.filter(n => n.id != id);
-  await deleteNftStorage(id);
-  await saveNftIds();
+  await deleteNftFromFirebase(id);
   renderCollection();
   showToast('NFT deleted');
 }
@@ -1126,17 +1129,11 @@ function switchTab(tab){
 // ============================================================
 // INIT
 // ============================================================
-async function autoLoadIndex(){
-  await loadIndexCache();
-  if(indexData.length > 0){ updateIndexStatus('loaded', indexData.length); renderIndexMatches(); return; }
-  loadIndexFromUrl();
-}
-
 async function init(){
   document.getElementById('index-url-display').textContent = INDEX_URL;
 
-  await loadAllLayers();
-  await loadAllNfts();
+  await loadAllLayersFromFirebase();
+  await loadAllNftsFromFirebase();
 
   previewCanvas = document.getElementById('live-preview-canvas');
   if(previewCanvas) previewCtx = previewCanvas.getContext('2d');
@@ -1147,7 +1144,8 @@ async function init(){
   renderIndexMatches();
   clearFile();
 
-  await autoLoadIndex();
+  // load index from cache or fetch
+  loadIndexFromUrl();
 }
 
 // ============================================================
