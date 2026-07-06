@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 <title>Registry — Trait Compositor & Index Matcher</title>
-<!-- Firebase SDKs -->
+<!-- Firebase SDKs v9 compat -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -422,17 +422,16 @@
 
 <script>
 // ============================================================
-// FIREBASE CONFIG & INIT
+// FIREBASE CONFIG & INIT (NEW CREDENTIALS)
 // ============================================================
 const firebaseConfig = {
-  apiKey: "AIzaSyCd4hlMTD7_iLhBUh7H9aINoPgb_7BbE7k",
-  authDomain: "punktt-3872b.firebaseapp.com",
-  databaseURL: "https://punktt-3872b-default-rtdb.firebaseio.com",
-  projectId: "punktt-3872b",
-  storageBucket: "punktt-3872b.firebasestorage.app",
-  messagingSenderId: "748701108776",
-  appId: "1:748701108776:web:76f64db670f2f4831b431d",
-  measurementId: "G-DP835T7G35"
+  apiKey: "AIzaSyBeei1Vr32PQZmfUTi0SUPHnxJuieHWXCU",
+  authDomain: "dickbutt-1ad1d.firebaseapp.com",
+  projectId: "dickbutt-1ad1d",
+  storageBucket: "dickbutt-1ad1d.firebasestorage.app",
+  messagingSenderId: "512151700075",
+  appId: "1:512151700075:web:7605d77078648fc829a72e",
+  measurementId: "G-S394PJZFBP"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -535,7 +534,6 @@ async function loadAllNftsFromFirebase(){
 
 async function saveNftToFirebase(nft){
   await fbNftRef(nft.id).set(nft);
-  // also update ids list
   const idsSnap = await fbNftIdsRef().once('value');
   let ids = idsSnap.val() || [];
   if(!ids.includes(nft.id)) ids.push(nft.id);
@@ -1144,7 +1142,6 @@ async function init(){
   renderIndexMatches();
   clearFile();
 
-  // load index from cache or fetch
   loadIndexFromUrl();
 }
 
