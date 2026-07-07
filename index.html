@@ -338,10 +338,10 @@
               <option value="Eyes">Eyes</option>
               <option value="Mouth">Mouth</option>
               <option value="Nose">Nose</option>
-              <option value="Hand">Hand</option>
               <option value="Shoes">Shoes</option>
               <option value="Butt">Butt</option>
               <option value="Dick">Dick</option>
+              <option value="Hand">Hand</option>
               <option value="Special">Special</option>
             </select>
           </div>
@@ -376,7 +376,7 @@
 
       <div class="plate mt-4">
         <div class="eyebrow">Stack order (fixed)</div>
-        <p class="text-xs mt-1" style="color:var(--paper-dim)">Background → Skin → Body → Hat → Eyes → Mouth → Nose → Hand → Shoes → Butt → Dick → Special</p>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Background → Skin → Body → Hat → Eyes → Mouth → Nose → Shoes → Butt → Dick → Hand → Special</p>
         <div id="order-preview-list" class="order-chip-row mt-2"></div>
       </div>
 
@@ -392,7 +392,7 @@
         <h2 class="title mt-1">Auto-generate collection</h2>
         <div class="hint-strip mt-2">
           <span>◆</span>
-          <span>Randomly combines your uploaded layers in the fixed stacking order, checks each result against the loaded index, and adds them to your Collection. Very large batches (thousands) use a lot of browser memory — start smaller if your browser struggles.</span>
+          <span>Background + Skin are drawn on every NFT. Every other trait rolls its own independent rarity — Shoes 77%, Hat 66%, Body 65%, Hand 44%, Dick 33%, Eyes 12%, Mouth 3%, Butt 2%, Nose 0.5%, Special 0.4% — with a safety ceiling of 7–8 total attributes per NFT. Each result is checked against the loaded index. Very large batches (thousands) use a lot of browser memory — start smaller if your browser struggles.</span>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
           <input type="number" id="batch-count" class="field" min="1" max="10000" value="100" style="flex:1;min-width:120px">
@@ -419,7 +419,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button id="btn-dl-all-images" class="btn btn-outline">⇩ Images (ZIP)</button>
             <button id="btn-dl-all-json" class="btn btn-outline">⇩ Metadata (ZIP)</button>
-            <button id="btn-delete-matched" class="btn btn-danger">Delete all matched</button>
+            <button id="btn-delete-matched" class="btn btn-danger">Delete 100% matches</button>
           </div>
         </div>
       </div>
@@ -496,28 +496,41 @@ const INDEX_URL = 'https://raw.githubusercontent.com/pengufi/Pengufi.github.io/m
 
 // Fixed stacking order used for compositing AND for the display order of
 // selected layers. Background is drawn first (bottom), Special last (top).
-const LAYER_ORDER = ["Background","Skin","Body","Hat","Eyes","Mouth","Nose","Hand","Shoes","Butt","Dick","Special"];
+const LAYER_ORDER = ["Background","Skin","Body","Hat","Eyes","Mouth","Nose","Shoes","Butt","Dick","Hand","Special"];
 const SECTIONS = LAYER_ORDER;
 // Trait sections that appear in generated metadata (everything except Background).
 const TRAIT_SECTIONS = LAYER_ORDER.filter(s => s !== 'Background');
 
-// Chance (0-1) that a given section gets a random layer during batch generation.
-// Background/Skin are close to guaranteed since they form the base of the image;
-// everything else is randomized independently so some traits legitimately end up "None".
+// ---- TUNE THESE TO CHANGE RARITY ----
+// Background is always drawn but is NOT a trait_type / not counted toward the
+// attribute cap below (it's just the canvas backdrop).
+// Every other value below is that section's OWN INDEPENDENT probability
+// (0 to 1) of getting a layer on any given generated NFT — Skin's is 1.0 so
+// it's effectively always present. These do NOT need to add up to anything;
+// each section is rolled separately, so e.g. Nose really does stay "None"
+// on roughly 99.5% of NFTs.
 const BATCH_INCLUDE_CHANCE = {
-  Background: 1.0,
-  Skin: 0.9,
-  Body: 0.7,
-  Hat: 0.6,
-  Eyes: 0.7,
-  Mouth: 0.7,
-  Nose: 0.55,
-  Hand: 0.6,
-  Shoes: 0.6,
-  Butt: 0.7,
-  Dick: 0.7,
-  Special: 0.35
+  Background: 1.0,   // always drawn, excluded from the attribute cap
+  Skin: 1.0,          // effectively always included
+  Body: 0.65,
+  Hat: 0.66,
+  Eyes: 0.12,
+  Mouth: 0.03,
+  Nose: 0.005,
+  Shoes: 0.77,
+  Butt: 0.02,
+  Dick: 0.33,
+  Hand: 0.44,
+  Special: 0.004
 };
+
+// Safety ceiling only (not a target): if an unusually large number of the
+// independent rolls above all hit on the same NFT, the total real attributes
+// (excluding Background) gets randomly trimmed back down to 7 or 8 so no NFT
+// ends up wearing every layer at once. Skin is never trimmed. Raise/lower
+// these two numbers to change that ceiling.
+const ATTRIBUTE_COUNT_MIN = 7;
+const ATTRIBUTE_COUNT_MAX = 8;
 
 // ============================================================
 // STATE
@@ -1146,19 +1159,66 @@ async function createNFT(){
 // ============================================================
 function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
+function randomIntInclusive(min, max){ return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function shuffleInPlace(arr){
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 // Builds one random, fully-ordered layer selection following LAYER_ORDER.
+//
+// Each section (other than Background) rolls its OWN independent chance from
+// BATCH_INCLUDE_CHANCE — this is what keeps rarities honest (e.g. Nose really
+// does end up "None" about 99.5% of the time, Special about 99.6%, etc).
+// Background is always drawn but is never counted as an attribute. Skin's
+// chance is 1.0, so it's effectively always included.
+//
+// ATTRIBUTE_COUNT_MIN/MAX is a CEILING, not a target: most NFTs will land
+// well under it naturally (the independent rolls above average out to well
+// below 7-8). On the rare NFT where an unusually large number of independent
+// rolls all hit at once, we randomly trim back down to 7 or 8 attributes
+// (Skin is protected and never trimmed) so no NFT ends up wearing every layer.
 function randomSelection(){
   const picks = [];
+
+  // Background: always drawn, never counted as an attribute slot.
+  const bgLayers = layersBySection['Background'] || [];
+  if(bgLayers.length > 0){
+    const layer = pickRandom(bgLayers);
+    picks.push({ section: 'Background', layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
+  }
+
+  // Every other section rolls its own independent chance.
   for(const section of LAYER_ORDER){
+    if(section === 'Background') continue;
     const layers = layersBySection[section] || [];
     if(layers.length === 0) continue;
-    const chance = BATCH_INCLUDE_CHANCE[section] ?? 0.6;
+    const chance = BATCH_INCLUDE_CHANCE[section] ?? 0.1;
     if(Math.random() <= chance){
       const layer = pickRandom(layers);
       picks.push({ section, layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
     }
   }
-  return sortByLayerOrder(picks);
+
+  // Enforce the max-attribute ceiling (Background excluded from the count).
+  const cap = randomIntInclusive(ATTRIBUTE_COUNT_MIN, ATTRIBUTE_COUNT_MAX);
+  const bgPick = picks.find(p => p.section === 'Background');
+  let traitPicks = picks.filter(p => p.section !== 'Background');
+
+  if(traitPicks.length > cap){
+    const mandatory = traitPicks.filter(p => p.section === 'Skin');
+    let optional = shuffleInPlace(traitPicks.filter(p => p.section !== 'Skin'));
+    const keepCount = Math.max(0, cap - mandatory.length);
+    optional = optional.slice(0, keepCount);
+    traitPicks = [...mandatory, ...optional];
+  }
+
+  const finalPicks = bgPick ? [bgPick, ...traitPicks] : traitPicks;
+  return sortByLayerOrder(finalPicks);
 }
 
 function attributeSignature(attributes){
@@ -1362,11 +1422,12 @@ async function deleteNFT(id){
   showToast('NFT deleted');
 }
 
-// Bulk delete of every NFT that currently has a matched index token, in one click.
+// Bulk delete of every NFT that has an EXACT 100% index match, in one click.
+// NFTs matched at 99% or lower are left alone on purpose.
 async function deleteAllMatched(){
-  const matched = nfts.filter(n => n.matchedTokenId);
-  if(matched.length === 0){ showToast('No matched NFTs to delete'); return; }
-  if(!confirm(`Delete ${matched.length} matched NFT(s)? This can't be undone.`)) return;
+  const matched = nfts.filter(n => n.matchedTokenId && n.matchPercentage === 100);
+  if(matched.length === 0){ showToast('No 100% matches to delete'); return; }
+  if(!confirm(`Delete ${matched.length} NFT(s) with a 100% index match? This can't be undone.`)) return;
 
   const matchedIds = new Set(matched.map(n => n.id));
   nfts = nfts.filter(n => !matchedIds.has(n.id));
@@ -1383,7 +1444,7 @@ async function deleteAllMatched(){
   }catch(e){
     // Batch-generated NFTs were never in Firebase to begin with — safe to ignore.
   }
-  showToast(`${matched.length} matched NFT(s) deleted`);
+  showToast(`${matched.length} NFT(s) with a 100% match deleted`);
 }
 
 // ============================================================
