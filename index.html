@@ -7,6 +7,8 @@
 <!-- Firebase SDKs v9 compat -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- JSZip for batch ZIP downloads -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -119,8 +121,10 @@
   .btn-amber:disabled{opacity:0.35;cursor:not-allowed;background:var(--amber);}
   .btn-outline{background:transparent;border-color:var(--line2);color:var(--paper);padding:8px 14px;font-size:12px;}
   .btn-outline:hover{border-color:var(--amber);color:var(--amber2);}
+  .btn-outline:disabled{opacity:0.35;cursor:not-allowed;}
   .btn-danger{background:transparent;border-color:rgba(192,82,74,0.4);color:var(--rose);padding:8px 14px;font-size:12px;}
   .btn-danger:hover{background:rgba(192,82,74,0.15);border-color:var(--danger);}
+  .btn-danger:disabled{opacity:0.35;cursor:not-allowed;}
   .btn-block{width:100%;}
   .btn-big{padding:15px 24px;font-size:14px;}
 
@@ -188,7 +192,13 @@
   .nft-card h3{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;}
   .nft-card .meta{font-size:11px;color:var(--paper-dim);margin-top:2px;}
   .nft-card .match-line{font-size:11px;color:var(--teal);margin-top:5px;font-family:'IBM Plex Mono',monospace;}
-  .nft-card .actions{display:flex;gap:6px;margin-top:10px;}
+  .nft-card .no-match-line{font-size:11px;color:var(--paper-dim);margin-top:5px;font-family:'IBM Plex Mono',monospace;}
+  .nft-card .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .nft-card .seq-tag{
+    position:absolute;margin:8px;background:rgba(0,0,0,0.55);color:var(--amber2);
+    font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 7px;border-radius:2px;
+  }
+  .nft-card .img-wrap{position:relative;}
 
   .idx-url-bar{
     display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:rgba(0,0,0,0.2);
@@ -209,6 +219,13 @@
   }
   .best-match-box{
     margin-top:14px;background:var(--teal-dim);border:1px solid var(--teal);border-radius:var(--radius);padding:13px 16px;
+  }
+
+  .progress-track{
+    width:100%;height:8px;border-radius:6px;background:rgba(0,0,0,0.3);overflow:hidden;border:1px solid var(--line);
+  }
+  .progress-fill{
+    height:100%;background:linear-gradient(90deg,var(--amber),var(--amber2));width:0%;transition:width .15s linear;
   }
 
   .empty-state{text-align:center;padding:56px 16px;color:var(--paper-dim);font-size:13px;line-height:1.7;}
@@ -315,16 +332,16 @@
             <input type="text" id="layer-name" placeholder="Layer name" class="field" style="flex:2;min-width:160px">
             <select id="layer-section" class="field" style="flex:1;min-width:130px">
               <option value="Background">Background</option>
+              <option value="Skin">Skin</option>
               <option value="Body">Body</option>
-              <option value="Butt">Butt</option>
-              <option value="Dick">Dick</option>
-              <option value="Eyes">Eyes</option>
-              <option value="Hand">Hand</option>
               <option value="Hat">Hat</option>
+              <option value="Eyes">Eyes</option>
               <option value="Mouth">Mouth</option>
               <option value="Nose">Nose</option>
+              <option value="Hand">Hand</option>
               <option value="Shoes">Shoes</option>
-              <option value="Skin">Skin</option>
+              <option value="Butt">Butt</option>
+              <option value="Dick">Dick</option>
               <option value="Special">Special</option>
             </select>
           </div>
@@ -358,7 +375,8 @@
       <div id="create-sections-container" class="space-y-3 mt-4"></div>
 
       <div class="plate mt-4">
-        <div class="eyebrow">Stack order</div>
+        <div class="eyebrow">Stack order (fixed)</div>
+        <p class="text-xs mt-1" style="color:var(--paper-dim)">Background → Skin → Body → Hat → Eyes → Mouth → Nose → Hand → Shoes → Butt → Dick → Special</p>
         <div id="order-preview-list" class="order-chip-row mt-2"></div>
       </div>
 
@@ -368,9 +386,43 @@
       </div>
 
       <button id="btn-create-nft" class="btn btn-amber btn-block btn-big mt-4">Generate NFT</button>
+
+      <div class="plate mt-4">
+        <div class="eyebrow">Batch generate</div>
+        <h2 class="title mt-1">Auto-generate collection</h2>
+        <div class="hint-strip mt-2">
+          <span>◆</span>
+          <span>Randomly combines your uploaded layers in the fixed stacking order, checks each result against the loaded index, and adds them to your Collection. Very large batches (thousands) use a lot of browser memory — start smaller if your browser struggles.</span>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
+          <input type="number" id="batch-count" class="field" min="1" max="10000" value="100" style="flex:1;min-width:120px">
+          <input type="text" id="batch-name" class="field" placeholder="Base name" value="V2 Dickbutt" style="flex:2;min-width:160px">
+        </div>
+        <button id="btn-batch-generate" class="btn btn-amber btn-block btn-big mt-3">Generate batch (up to 10,000)</button>
+        <div id="batch-progress" class="mt-3 hidden">
+          <div class="flex-between">
+            <span class="text-xs mono" id="batch-progress-label">0 / 0</span>
+            <span class="text-xs mono" id="batch-progress-pct">0%</span>
+          </div>
+          <div class="progress-track mt-1"><div class="progress-fill" id="batch-progress-fill"></div></div>
+        </div>
+      </div>
     </div>
 
     <div id="panel-collection" class="panel hidden">
+      <div class="plate mb-0" style="margin-bottom:14px">
+        <div class="flex-between">
+          <div>
+            <div class="eyebrow">Collection</div>
+            <h2 class="title mt-1"><span id="collection-count" class="mono">0</span> NFTs</h2>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="btn-dl-all-images" class="btn btn-outline">⇩ Images (ZIP)</button>
+            <button id="btn-dl-all-json" class="btn btn-outline">⇩ Metadata (ZIP)</button>
+            <button id="btn-delete-matched" class="btn btn-danger">Delete all matched</button>
+          </div>
+        </div>
+      </div>
       <div id="nft-list" class="nft-grid"></div>
       <div id="nft-empty" class="empty-state hidden"><span class="big">◇</span>No NFTs generated yet.</div>
     </div>
@@ -441,8 +493,31 @@ const db = firebase.database();
 // CONFIG
 // ============================================================
 const INDEX_URL = 'https://raw.githubusercontent.com/pengufi/Pengufi.github.io/main/index_clean.json';
-const SECTIONS = ["Background","Body","Butt","Dick","Eyes","Hand","Hat","Mouth","Nose","Shoes","Skin","Special"];
-const TRAIT_SECTIONS = ["Body","Butt","Dick","Eyes","Hand","Hat","Mouth","Nose","Shoes","Skin","Special"];
+
+// Fixed stacking order used for compositing AND for the display order of
+// selected layers. Background is drawn first (bottom), Special last (top).
+const LAYER_ORDER = ["Background","Skin","Body","Hat","Eyes","Mouth","Nose","Hand","Shoes","Butt","Dick","Special"];
+const SECTIONS = LAYER_ORDER;
+// Trait sections that appear in generated metadata (everything except Background).
+const TRAIT_SECTIONS = LAYER_ORDER.filter(s => s !== 'Background');
+
+// Chance (0-1) that a given section gets a random layer during batch generation.
+// Background/Skin are close to guaranteed since they form the base of the image;
+// everything else is randomized independently so some traits legitimately end up "None".
+const BATCH_INCLUDE_CHANCE = {
+  Background: 1.0,
+  Skin: 0.9,
+  Body: 0.7,
+  Hat: 0.6,
+  Eyes: 0.7,
+  Mouth: 0.7,
+  Nose: 0.55,
+  Hand: 0.6,
+  Shoes: 0.6,
+  Butt: 0.7,
+  Dick: 0.7,
+  Special: 0.35
+};
 
 // ============================================================
 // STATE
@@ -457,6 +532,11 @@ let uploadedFileName = '';
 let indexData = [];
 let isIndexLoading = false;
 let previewCanvas = null, previewCtx = null;
+let isBatchRunning = false;
+
+// Cache of decoded <img> elements keyed by their data-URL / URL source, so batch
+// generation of thousands of NFTs doesn't re-decode the same PNG/SVG every time.
+const imageCache = new Map();
 
 // ============================================================
 // UTIL
@@ -471,6 +551,9 @@ function showToast(msg){
   window._toastTimer = setTimeout(() => toast.classList.add('hidden'), 2600);
 }
 function uid(){ return Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+function sortByLayerOrder(items){
+  return [...items].sort((a,b) => LAYER_ORDER.indexOf(a.section) - LAYER_ORDER.indexOf(b.section));
+}
 
 function updateIndexStatus(status, count = null){
   const dot = document.getElementById('index-status-dot');
@@ -532,6 +615,9 @@ async function loadAllNftsFromFirebase(){
   }
 }
 
+// Only single, manually-created NFTs are persisted to Firebase. Large batch runs
+// (hundreds/thousands of base64 images) would blow past Realtime Database limits,
+// so batch results stay in local browser memory and can be exported as ZIPs instead.
 async function saveNftToFirebase(nft){
   await fbNftRef(nft.id).set(nft);
   const idsSnap = await fbNftIdsRef().once('value');
@@ -594,6 +680,8 @@ async function clearIndex(){
   showToast('Index cleared');
 }
 
+// Builds a { trait_type: value } map for ONE index entry, across every trait
+// section (all folders), so comparisons always walk the full trait_type set.
 function getTraitMap(nft){
   const map = {};
   if(nft && Array.isArray(nft.attributes)){
@@ -604,6 +692,9 @@ function getTraitMap(nft){
   return map;
 }
 
+// Core matcher: walks every trait_type (folder) for the candidate NFT, skips any
+// trait whose value is "None", and compares the remaining trait_type/value pairs
+// against every entry in the loaded index.json.
 function matchNFTWithIndex(selectedLayers){
   if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None' };
 
@@ -611,7 +702,10 @@ function matchNFTWithIndex(selectedLayers){
   for(const layer of selectedLayers){
     if(TRAIT_SECTIONS.includes(layer.section)) traitMap[layer.section] = layer.value;
   }
-  const chosenTraits = Object.entries(traitMap).filter(([,v]) => v !== 'None');
+  // Walk ALL trait_types, but only keep the ones that actually have a value (skip "None").
+  const chosenTraits = TRAIT_SECTIONS
+    .filter(section => traitMap[section] !== undefined && traitMap[section] !== 'None')
+    .map(section => [section, traitMap[section]]);
   const totalTraits = chosenTraits.length;
 
   const results = [];
@@ -711,29 +805,43 @@ function loadImg(src){
   });
 }
 
+// Cached image loader — batch generation reuses the same uploaded layer many
+// times, so we decode each source image once and keep the <img> around.
+function getCachedImage(src){
+  if(imageCache.has(src)) return imageCache.get(src);
+  const p = loadImg(src);
+  imageCache.set(src, p);
+  return p;
+}
+
 async function updateLivePreview(){
   if(!previewCtx) return;
   previewCtx.clearRect(0,0,512,512);
   previewCtx.fillStyle = '#100e0b';
   previewCtx.fillRect(0,0,512,512);
   for(const item of selectedOrder){
-    const img = await loadImg(item.imageUrl);
+    const img = await getCachedImage(item.imageUrl);
     if(img) renderImageToCanvas(previewCtx, img, 512, 512);
   }
+}
+
+async function compositeLayersToDataUrl(orderedItems, ctx){
+  ctx.clearRect(0,0,512,512);
+  ctx.fillStyle = '#100e0b';
+  ctx.fillRect(0,0,512,512);
+  for(const item of orderedItems){
+    const img = await getCachedImage(item.imageUrl);
+    if(!img) throw new Error(`Failed to load ${item.section}: ${item.value}`);
+    renderImageToCanvas(ctx, img, 512, 512);
+  }
+  return ctx.canvas.toDataURL('image/png');
 }
 
 async function compositeFromSelected(){
   const canvas = document.createElement('canvas');
   canvas.width = 512; canvas.height = 512;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#100e0b';
-  ctx.fillRect(0,0,512,512);
-  for(const item of selectedOrder){
-    const img = await loadImg(item.imageUrl);
-    if(!img) throw new Error(`Failed to load ${item.section}: ${item.value}`);
-    renderImageToCanvas(ctx, img, 512, 512);
-  }
-  return canvas.toDataURL('image/png');
+  return compositeLayersToDataUrl(selectedOrder, ctx);
 }
 
 // ============================================================
@@ -817,6 +925,7 @@ async function deleteLayer(section, layerId){
   await deleteLayerFromFirebase(section, layerId);
   layersBySection[section] = layersBySection[section].filter(l => String(l.id) !== String(layerId));
   selectedOrder = selectedOrder.filter(item => String(item.layerId) !== String(layerId));
+  selectedOrder = sortByLayerOrder(selectedOrder);
   selectedOrder.forEach((item, idx) => item.order = idx + 1);
   renderSections();
   renderCreateSections();
@@ -945,6 +1054,9 @@ function renderCreateSections(){
   updateOrderPreview();
 }
 
+// Selecting/deselecting a layer always re-sorts the selection into the fixed
+// LAYER_ORDER (Background → Skin → Body → Hat → Eyes → Mouth → Nose → Hand →
+// Shoes → Butt → Dick → Special) regardless of the order the user clicked in.
 function selectLayer(section, layerId, value, imageUrl, gender){
   const existingIndex = selectedOrder.findIndex(item => item.section === section);
   if(existingIndex !== -1 && String(selectedOrder[existingIndex].layerId) === String(layerId)){
@@ -952,8 +1064,9 @@ function selectLayer(section, layerId, value, imageUrl, gender){
   } else if(existingIndex !== -1){
     selectedOrder[existingIndex] = { ...selectedOrder[existingIndex], layerId, value, imageUrl, gender };
   } else {
-    selectedOrder.push({ section, layerId, value, imageUrl, gender, order: selectedOrder.length + 1 });
+    selectedOrder.push({ section, layerId, value, imageUrl, gender, order: 0 });
   }
+  selectedOrder = sortByLayerOrder(selectedOrder);
   selectedOrder.forEach((item, idx) => item.order = idx + 1);
   renderCreateSections();
   updateLivePreview();
@@ -970,7 +1083,24 @@ function updateOrderPreview(){
 }
 
 // ============================================================
-// NFT CREATION
+// ATTRIBUTES BUILDER (shared by single + batch creation)
+// ============================================================
+// Every trait_type (folder) is always present. If a folder has no layer
+// selected for this NFT, its value is "None" — the folder name itself never
+// changes. No "Attribute Count" entry is included.
+function buildAttributes(orderedSelection){
+  const valueBySection = {};
+  for(const item of orderedSelection){
+    if(TRAIT_SECTIONS.includes(item.section)) valueBySection[item.section] = item.value;
+  }
+  return TRAIT_SECTIONS.map(section => ({
+    trait_type: section,
+    value: valueBySection[section] !== undefined ? valueBySection[section] : 'None'
+  }));
+}
+
+// ============================================================
+// SINGLE NFT CREATION
 // ============================================================
 async function createNFT(){
   if(selectedOrder.length === 0){ showToast('Select at least one layer'); return; }
@@ -982,21 +1112,17 @@ async function createNFT(){
   btn.innerHTML = '<span class="spin" style="display:inline-block;width:14px;height:14px;border:2px solid #191305;border-top-color:transparent;border-radius:50%"></span> Generating…';
 
   try{
+    const orderedSelection = sortByLayerOrder(selectedOrder);
     const imageData = await compositeFromSelected();
-    const attributes = selectedOrder.filter(item => item.section !== 'Background')
-      .map(item => ({ trait_type: item.section, value: item.value }));
-    for(const section of TRAIT_SECTIONS){
-      if(!attributes.find(a => a.trait_type === section)) attributes.push({ trait_type: section, value: 'None' });
-    }
-    const setTraitCount = attributes.filter(a => a.value !== 'None').length;
-    attributes.push({ trait_type: 'Attribute Count', value: setTraitCount.toString() });
+    const attributes = buildAttributes(orderedSelection);
 
-    const matchResult = matchNFTWithIndex(selectedOrder);
+    const matchResult = matchNFTWithIndex(orderedSelection);
     const matchedTokenId = matchResult.bestMatch ? matchResult.bestTokenId : null;
 
     const nft = {
       id: uid(), name, description, image: imageData, attributes,
-      matchedTokenId, matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0
+      matchedTokenId, matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0,
+      savedToFirebase: true
     };
     nfts.push(nft);
     await saveNftToFirebase(nft);
@@ -1006,7 +1132,7 @@ async function createNFT(){
     renderCollection();
     updateLivePreview();
     renderIndexMatches();
-    showToast(`"${name}" created${matchedTokenId ? ' — matches token #' + matchedTokenId : ''}`);
+    showToast(`"${name}" created${matchedTokenId ? ' — matches token #' + matchedTokenId : ' — no index match'}`);
     switchTab('collection');
   }catch(err){
     showToast(`Error: ${err.message}`);
@@ -1016,22 +1142,148 @@ async function createNFT(){
 }
 
 // ============================================================
+// BATCH NFT GENERATION (up to 10,000)
+// ============================================================
+function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+// Builds one random, fully-ordered layer selection following LAYER_ORDER.
+function randomSelection(){
+  const picks = [];
+  for(const section of LAYER_ORDER){
+    const layers = layersBySection[section] || [];
+    if(layers.length === 0) continue;
+    const chance = BATCH_INCLUDE_CHANCE[section] ?? 0.6;
+    if(Math.random() <= chance){
+      const layer = pickRandom(layers);
+      picks.push({ section, layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
+    }
+  }
+  return sortByLayerOrder(picks);
+}
+
+function attributeSignature(attributes){
+  return attributes.map(a => `${a.trait_type}:${a.value}`).join('|');
+}
+
+function setBatchProgressUI(visible, done, total){
+  const wrap = document.getElementById('batch-progress');
+  wrap.classList.toggle('hidden', !visible);
+  if(!visible) return;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  document.getElementById('batch-progress-label').textContent = `${done} / ${total}`;
+  document.getElementById('batch-progress-pct').textContent = `${pct}%`;
+  document.getElementById('batch-progress-fill').style.width = `${pct}%`;
+}
+
+async function generateBatch(){
+  if(isBatchRunning){ showToast('A batch is already running'); return; }
+  const hasAnyLayers = SECTIONS.some(s => (layersBySection[s] || []).length > 0);
+  if(!hasAnyLayers){ showToast('Upload some layers first'); return; }
+
+  let count = parseInt(document.getElementById('batch-count').value, 10) || 0;
+  count = Math.max(1, Math.min(10000, count));
+  const baseName = document.getElementById('batch-name').value.trim() || 'V2 Dickbutt';
+
+  if(count > 2000){
+    showToast('Large batch — this may take a while and use a lot of memory');
+  }
+
+  isBatchRunning = true;
+  const btn = document.getElementById('btn-batch-generate');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  setBatchProgressUI(true, 0, count);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  const seenSignatures = new Set(nfts.map(n => attributeSignature(n.attributes)));
+  const startIndex = nfts.length;
+  let created = 0;
+
+  try{
+    for(let i = 0; i < count; i++){
+      let orderedSelection = null;
+      let attributes = null;
+      let attempts = 0;
+      // Try a few times to avoid exact duplicate trait combos; give up and
+      // accept a duplicate if the layer pool is too small to avoid one.
+      do{
+        orderedSelection = randomSelection();
+        attributes = buildAttributes(orderedSelection);
+        attempts++;
+      } while(seenSignatures.has(attributeSignature(attributes)) && attempts < 20);
+
+      if(orderedSelection.length === 0){
+        // No layers landed for this NFT at all (unlucky rolls) — skip this slot.
+        continue;
+      }
+
+      seenSignatures.add(attributeSignature(attributes));
+
+      const imageData = await compositeLayersToDataUrl(orderedSelection, ctx);
+      const matchResult = matchNFTWithIndex(orderedSelection);
+      const matchedTokenId = matchResult.bestMatch ? matchResult.bestTokenId : null;
+      const seq = startIndex + created + 1;
+
+      nfts.push({
+        id: uid(),
+        name: `${baseName} #${seq}`,
+        description: document.getElementById('nft-description').value.trim(),
+        image: imageData,
+        attributes,
+        matchedTokenId,
+        matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0,
+        savedToFirebase: false
+      });
+      created++;
+
+      if(created % 25 === 0 || created === count){
+        setBatchProgressUI(true, created, count);
+        renderCollection();
+        // Yield to the browser so the progress bar/UI stays responsive.
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    renderCollection();
+    renderIndexMatches();
+    showToast(`Batch complete — ${created} NFT(s) generated`);
+  }catch(err){
+    showToast(`Batch error: ${err.message}`);
+  }finally{
+    isBatchRunning = false;
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    setTimeout(() => setBatchProgressUI(false, 0, 0), 1200);
+    switchTab('collection');
+  }
+}
+
+// ============================================================
 // COLLECTION
 // ============================================================
 function renderCollection(){
   const container = document.getElementById('nft-list');
   const empty = document.getElementById('nft-empty');
+  const countEl = document.getElementById('collection-count');
   if(!container) return;
+  if(countEl) countEl.textContent = nfts.length;
   empty.classList.toggle('hidden', nfts.length > 0);
   if(nfts.length === 0){ container.innerHTML = ''; return; }
 
-  container.innerHTML = nfts.map(nft => `
+  container.innerHTML = nfts.map((nft, idx) => `
     <div class="nft-card fade-in" data-view-nft="${nft.id}">
-      <div class="img-wrap"><img src="${nft.image}"></div>
+      <div class="img-wrap">
+        <span class="seq-tag">#${idx + 1}</span>
+        <img src="${nft.image}">
+      </div>
       <div class="body">
         <h3>${escapeHtml(nft.name)}</h3>
-        <p class="meta">${nft.attributes.length - 1} traits</p>
-        ${nft.matchedTokenId ? `<p class="match-line">↳ matches #${escapeHtml(nft.matchedTokenId)}</p>` : ''}
+        <p class="meta">${nft.attributes.length} traits</p>
+        ${nft.matchedTokenId ? `<p class="match-line">↳ matches #${escapeHtml(nft.matchedTokenId)} (${nft.matchPercentage}%)</p>` : `<p class="no-match-line">↳ no index match</p>`}
         <div class="actions">
           <button class="btn btn-outline" data-dl-img="${nft.id}">Image</button>
           <button class="btn btn-outline" data-dl-json="${nft.id}">JSON</button>
@@ -1052,21 +1304,23 @@ function renderCollection(){
   container.querySelectorAll('[data-del-nft]').forEach(el => el.addEventListener('click', () => deleteNFT(el.dataset.delNft)));
 }
 
+function nftMetadataObject(nft){
+  return { name: nft.name, description: nft.description, image: 'ipfs://placeholder', attributes: nft.attributes };
+}
+
 function viewMetadata(id){
   const nft = nfts.find(n => n.id == id);
   if(!nft) return;
 
   document.getElementById('modal-title').textContent = nft.name;
-  const traits = nft.attributes.filter(a => a.trait_type !== 'Attribute Count');
-  const attrCount = nft.attributes.find(a => a.trait_type === 'Attribute Count');
+  const traits = nft.attributes;
 
   document.getElementById('modal-body').innerHTML = `
     <div class="modal-img-wrap"><img src="${nft.image}"></div>
     ${nft.description ? `<p class="modal-desc">${escapeHtml(nft.description)}</p>` : ''}
-    ${nft.matchedTokenId ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Matches token</b> #${escapeHtml(nft.matchedTokenId)} <span style="color:var(--paper-dim)">(${nft.matchPercentage}% trait match)</span></span></div>` : ''}
+    ${nft.matchedTokenId ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Matches token</b> #${escapeHtml(nft.matchedTokenId)} <span style="color:var(--paper-dim)">(${nft.matchPercentage}% trait match)</span></span></div>` : `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span>No matching entry found in the loaded index.</span></div>`}
     <table class="trait-table">
       ${traits.map(a => `<tr><td>${escapeHtml(a.trait_type)}</td><td class="${a.value === 'None' ? 'none-val' : ''}">${escapeHtml(a.value)}</td></tr>`).join('')}
-      ${attrCount ? `<tr><td>Attribute count</td><td>${escapeHtml(attrCount.value)}</td></tr>` : ''}
     </table>
   `;
 
@@ -1082,7 +1336,7 @@ function closeMetadataModal(){
 function downloadJSON(id){
   const nft = nfts.find(n => n.id == id);
   if(!nft) return;
-  const metadata = { name: nft.name, description: nft.description, image: 'ipfs://placeholder', attributes: nft.attributes };
+  const metadata = nftMetadataObject(nft);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' }));
   a.download = `${nft.name.replace(/[^a-z0-9]/gi, '_')}.json`;
@@ -1106,6 +1360,74 @@ async function deleteNFT(id){
   await deleteNftFromFirebase(id);
   renderCollection();
   showToast('NFT deleted');
+}
+
+// Bulk delete of every NFT that currently has a matched index token, in one click.
+async function deleteAllMatched(){
+  const matched = nfts.filter(n => n.matchedTokenId);
+  if(matched.length === 0){ showToast('No matched NFTs to delete'); return; }
+  if(!confirm(`Delete ${matched.length} matched NFT(s)? This can't be undone.`)) return;
+
+  const matchedIds = new Set(matched.map(n => n.id));
+  nfts = nfts.filter(n => !matchedIds.has(n.id));
+  renderCollection();
+
+  try{
+    const updates = {};
+    matched.forEach(n => { updates['nfts/' + n.id] = null; });
+    if(Object.keys(updates).length > 0) await db.ref().update(updates);
+    const idsSnap = await fbNftIdsRef().once('value');
+    let ids = idsSnap.val() || [];
+    ids = ids.filter(i => !matchedIds.has(i));
+    await fbNftIdsRef().set(ids);
+  }catch(e){
+    // Batch-generated NFTs were never in Firebase to begin with — safe to ignore.
+  }
+  showToast(`${matched.length} matched NFT(s) deleted`);
+}
+
+// ============================================================
+// ZIP EXPORTS — sequential numbering (1, 2, 3, …) shared by images & metadata
+// ============================================================
+async function downloadAllImagesZip(){
+  if(nfts.length === 0){ showToast('No NFTs to download'); return; }
+  if(typeof JSZip === 'undefined'){ showToast('ZIP library failed to load — check your connection'); return; }
+  showToast(`Zipping ${nfts.length} image(s)…`);
+  try{
+    const zip = new JSZip();
+    nfts.forEach((nft, idx) => {
+      const base64 = nft.image.split(',')[1];
+      zip.file(`${idx + 1}.png`, base64, { base64: true });
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'nft_images.zip';
+    a.click();
+    showToast('Images ZIP downloaded');
+  }catch(err){
+    showToast(`Zip error: ${err.message}`);
+  }
+}
+
+async function downloadAllMetadataZip(){
+  if(nfts.length === 0){ showToast('No NFTs to download'); return; }
+  if(typeof JSZip === 'undefined'){ showToast('ZIP library failed to load — check your connection'); return; }
+  showToast(`Zipping ${nfts.length} metadata file(s)…`);
+  try{
+    const zip = new JSZip();
+    nfts.forEach((nft, idx) => {
+      zip.file(`${idx + 1}.json`, JSON.stringify(nftMetadataObject(nft), null, 2));
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'nft_metadata.zip';
+    a.click();
+    showToast('Metadata ZIP downloaded');
+  }catch(err){
+    showToast(`Zip error: ${err.message}`);
+  }
 }
 
 // ============================================================
@@ -1164,8 +1486,12 @@ document.getElementById('drop-zone').addEventListener('drop', e => {
 document.getElementById('btn-clear-file').addEventListener('click', clearFile);
 document.getElementById('btn-add-layer').addEventListener('click', addLayerFromUpload);
 document.getElementById('btn-create-nft').addEventListener('click', createNFT);
+document.getElementById('btn-batch-generate').addEventListener('click', generateBatch);
 document.getElementById('btn-load-index').addEventListener('click', loadIndexFromUrl);
 document.getElementById('btn-clear-index').addEventListener('click', clearIndex);
+document.getElementById('btn-dl-all-images').addEventListener('click', downloadAllImagesZip);
+document.getElementById('btn-dl-all-json').addEventListener('click', downloadAllMetadataZip);
+document.getElementById('btn-delete-matched').addEventListener('click', deleteAllMatched);
 document.getElementById('modal-close-btn').addEventListener('click', closeMetadataModal);
 document.getElementById('metadata-modal').addEventListener('click', e => {
   if(e.target.id === 'metadata-modal') closeMetadataModal();
@@ -1173,7 +1499,7 @@ document.getElementById('metadata-modal').addEventListener('click', e => {
 document.getElementById('modal-copy-json').addEventListener('click', async () => {
   const nft = window._currentModalNft;
   if(!nft) return;
-  const metadata = { name: nft.name, description: nft.description, image: 'ipfs://placeholder', attributes: nft.attributes };
+  const metadata = nftMetadataObject(nft);
   try{
     await navigator.clipboard.writeText(JSON.stringify(metadata, null, 2));
     showToast('JSON copied to clipboard');
