@@ -705,15 +705,26 @@ function getTraitMap(nft){
   return map;
 }
 
+// Normalizes a trait value for comparison: trims stray whitespace and
+// ignores case, so "Trainers", " Trainers " and "trainers" all count as the
+// same value. This does NOT forgive genuine spelling differences (e.g.
+// "Trainers" vs "Trianers") — those still need to be fixed at the source.
+function normalizeVal(v){ return String(v ?? 'None').trim().toLowerCase(); }
+
 // ---------------------------------------------------------------
-// Core matcher (FIXED): an index entry only counts as a "match" if EVERY
-// trait_type (all 11 sections, INCLUDING the ones that are "None") is
-// IDENTICAL between the composed NFT and the index entry. Partial /
-// percentage matches are no longer surfaced at all — either it's a full
-// 100% match or it doesn't appear in results.
+// Core matcher: an index entry only counts as a "match" if EVERY trait_type
+// (all 11 sections, INCLUDING the ones that are "None") is IDENTICAL
+// (case/whitespace-insensitive) between the composed NFT and the index
+// entry. Partial matches are never surfaced as "matches" — either it's a
+// full 100% match or it doesn't appear in results.
+//
+// For diagnostics, we also track the single "closest" entry (highest
+// trait overlap) even when nothing hits 100%, along with exactly which
+// trait_types differ and how — this is what gets shown in the UI so you
+// can see WHY something isn't matching instead of guessing.
 // ---------------------------------------------------------------
 function matchNFTWithIndex(selectedLayers){
-  if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None' };
+  if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None', closest: null };
 
   const traitMap = {};
   for(const layer of selectedLayers){
@@ -726,18 +737,27 @@ function matchNFTWithIndex(selectedLayers){
   const totalTraits = fullTraits.filter(([, v]) => v !== 'None').length;
 
   const results = [];
+  let closest = null; // best partial match, kept only for the "no match" diagnostic
+
   for(const nft of indexData){
     const nftTraits = getTraitMap(nft);
-    // Exact match = every single trait_type lines up exactly, "None" included.
-    const isExactMatch = fullTraits.every(([trait, value]) => (nftTraits[trait] ?? 'None') === value);
-    if(isExactMatch){
+    let matchCount = 0;
+    const diffs = [];
+    for(const [trait, value] of fullTraits){
+      const nftVal = nftTraits[trait] ?? 'None';
+      if(normalizeVal(nftVal) === normalizeVal(value)) matchCount++;
+      else diffs.push({ trait, expected: value, found: nftVal });
+    }
+    if(matchCount === fullTraits.length){
       results.push({ nft, matchCount: totalTraits, totalTraits, matchPercentage: 100 });
+    } else if(!closest || matchCount > closest.matchCount){
+      closest = { nft, matchCount, totalFields: fullTraits.length, diffs };
     }
   }
 
   const bestMatch = results.length > 0 ? results[0] : null;
   const bestTokenId = bestMatch ? (bestMatch.nft.token_id ?? bestMatch.nft.id ?? 'Unknown') : 'None';
-  return { matches: results, matchCount: results.length, bestMatch, bestTokenId };
+  return { matches: results, matchCount: results.length, bestMatch, bestTokenId, closest };
 }
 
 function renderIndexMatches(){
@@ -778,7 +798,17 @@ function renderIndexMatches(){
             <span class="match-badge">100%</span>
           </div>
         </div>
-      ` : `<div class="hint-strip mt-3"><span>◆</span><span>No exact matching entries found in the index for this trait combination.</span></div>`}
+      ` : (result.closest ? `
+        <div class="hint-strip mt-3">
+          <span>◆</span>
+          <span>
+            <b>No exact match.</b> Closest entry is token
+            <b>#${escapeHtml(result.closest.nft.token_id ?? result.closest.nft.id ?? '?')}</b>
+            (${result.closest.matchCount}/${result.closest.totalFields} traits line up). It differs on:
+            ${result.closest.diffs.map(d => `<b>${escapeHtml(d.trait)}</b> (yours: "${escapeHtml(d.expected)}", index: "${escapeHtml(d.found)}")`).join(', ')}
+          </span>
+        </div>
+      ` : `<div class="hint-strip mt-3"><span>◆</span><span>No matching entries found in the index for this trait combination.</span></div>`)}
 
       ${others.length > 0 ? `
         <div class="mt-4">
@@ -1132,6 +1162,7 @@ async function createNFT(){
     const nft = {
       id: uid(), name, description, image: imageData, attributes,
       matchedTokenId, matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0,
+      closest: matchResult.bestMatch ? null : matchResult.closest,
       savedToFirebase: true
     };
     nfts.push(nft);
@@ -1293,6 +1324,7 @@ async function generateBatch(){
         attributes,
         matchedTokenId,
         matchPercentage: matchResult.bestMatch ? matchResult.bestMatch.matchPercentage : 0,
+        closest: matchResult.bestMatch ? null : matchResult.closest,
         savedToFirebase: false
       });
       created++;
@@ -1375,7 +1407,11 @@ function viewMetadata(id){
   document.getElementById('modal-body').innerHTML = `
     <div class="modal-img-wrap"><img src="${nft.image}"></div>
     ${nft.description ? `<p class="modal-desc">${escapeHtml(nft.description)}</p>` : ''}
-    ${nft.matchedTokenId ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Matches token</b> #${escapeHtml(nft.matchedTokenId)} <span style="color:var(--paper-dim)">(${nft.matchPercentage}% trait match)</span></span></div>` : `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span>No matching entry found in the loaded index.</span></div>`}
+    ${nft.matchedTokenId
+      ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Matches token</b> #${escapeHtml(nft.matchedTokenId)} <span style="color:var(--paper-dim)">(${nft.matchPercentage}% trait match)</span></span></div>`
+      : (nft.closest
+          ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>No exact match.</b> Closest is token #${escapeHtml(nft.closest.nft.token_id ?? nft.closest.nft.id ?? '?')} (${nft.closest.matchCount}/${nft.closest.totalFields} traits). Differs on: ${nft.closest.diffs.map(d => `<b>${escapeHtml(d.trait)}</b> (yours: "${escapeHtml(d.expected)}", index: "${escapeHtml(d.found)}")`).join(', ')}</span></div>`
+          : `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span>No matching entry found in the loaded index.</span></div>`)}
     <table class="trait-table">
       ${traits.map(a => `<tr><td>${escapeHtml(a.trait_type)}</td><td class="${a.value === 'None' ? 'none-val' : ''}">${escapeHtml(a.value)}</td></tr>`).join('')}
     </table>
