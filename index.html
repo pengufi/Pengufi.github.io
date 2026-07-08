@@ -705,9 +705,13 @@ function getTraitMap(nft){
   return map;
 }
 
-// Core matcher: an index entry only counts as a "match" if EVERY trait_type
-// (all 11 sections, including the ones that are "None") is IDENTICAL between
-// the composed NFT and the index entry. No partial / percentage matches.
+// ---------------------------------------------------------------
+// Core matcher (FIXED): an index entry only counts as a "match" if EVERY
+// trait_type (all 11 sections, INCLUDING the ones that are "None") is
+// IDENTICAL between the composed NFT and the index entry. Partial /
+// percentage matches are no longer surfaced at all — either it's a full
+// 100% match or it doesn't appear in results.
+// ---------------------------------------------------------------
 function matchNFTWithIndex(selectedLayers){
   if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None' };
 
@@ -715,47 +719,22 @@ function matchNFTWithIndex(selectedLayers){
   for(const layer of selectedLayers){
     if(TRAIT_SECTIONS.includes(layer.section)) traitMap[layer.section] = layer.value;
   }
-  // Full trait set for the candidate, filling in "None" for anything not selected.
+  // Full trait set for the candidate NFT, filling in "None" for any section
+  // that has nothing selected — this mirrors exactly what buildAttributes()
+  // will end up writing into the NFT's metadata.
   const fullTraits = TRAIT_SECTIONS.map(section => [section, traitMap[section] ?? 'None']);
   const totalTraits = fullTraits.filter(([, v]) => v !== 'None').length;
 
   const results = [];
   for(const nft of indexData){
     const nftTraits = getTraitMap(nft);
-    // Exact match = every single trait_type lines up, "None" included.
+    // Exact match = every single trait_type lines up exactly, "None" included.
     const isExactMatch = fullTraits.every(([trait, value]) => (nftTraits[trait] ?? 'None') === value);
     if(isExactMatch){
       results.push({ nft, matchCount: totalTraits, totalTraits, matchPercentage: 100 });
     }
   }
 
-  const bestMatch = results.length > 0 ? results[0] : null;
-  const bestTokenId = bestMatch ? (bestMatch.nft.token_id ?? bestMatch.nft.id ?? 'Unknown') : 'None';
-  return { matches: results, matchCount: results.length, bestMatch, bestTokenId };
-}
-  // Walk ALL trait_types, but only keep the ones that actually have a value (skip "None").
-  const chosenTraits = TRAIT_SECTIONS
-    .filter(section => traitMap[section] !== undefined && traitMap[section] !== 'None')
-    .map(section => [section, traitMap[section]]);
-  const totalTraits = chosenTraits.length;
-
-  const results = [];
-  for(const nft of indexData){
-    const nftTraits = getTraitMap(nft);
-    let matchCount = 0;
-    for(const [trait, value] of chosenTraits){
-      if(nftTraits[trait] === value) matchCount++;
-    }
-    if(matchCount > 0){
-      results.push({
-        nft,
-        matchCount,
-        totalTraits,
-        matchPercentage: totalTraits > 0 ? Math.round((matchCount / totalTraits) * 100) : 0
-      });
-    }
-  }
-  results.sort((a,b) => b.matchCount - a.matchCount || b.matchPercentage - a.matchPercentage);
   const bestMatch = results.length > 0 ? results[0] : null;
   const bestTokenId = bestMatch ? (bestMatch.nft.token_id ?? bestMatch.nft.id ?? 'Unknown') : 'None';
   return { matches: results, matchCount: results.length, bestMatch, bestTokenId };
@@ -784,28 +763,28 @@ function renderIndexMatches(){
       <div class="flex-between">
         <div>
           <h3 class="disp" style="font-size:15px;font-weight:700">Matching results</h3>
-          <p class="text-xs mt-1" style="color:var(--paper-dim)">${selectedLayers.filter(l=>l.value!=='None').length} traits selected</p>
+          <p class="text-xs mt-1" style="color:var(--paper-dim)">${selectedLayers.filter(l=>l.value!=='None').length} traits selected — showing exact (100%) matches only</p>
         </div>
-        <span class="match-badge">${result.matchCount} matches</span>
+        <span class="match-badge">${result.matchCount} exact match${result.matchCount === 1 ? '' : 'es'}</span>
       </div>
 
       ${result.bestMatch ? `
         <div class="best-match-box">
           <div class="flex-between">
             <div>
-              <span style="color:var(--teal);font-weight:700;font-family:'Space Grotesk',sans-serif">Best match</span>
+              <span style="color:var(--teal);font-weight:700;font-family:'Space Grotesk',sans-serif">Exact match</span>
               <span class="text-xs mono mt-1" style="display:block;color:var(--paper-dim)">Token #${escapeHtml(result.bestTokenId)}</span>
             </div>
-            <span class="match-badge">${result.bestMatch.matchCount}/${result.bestMatch.totalTraits} · ${result.bestMatch.matchPercentage}%</span>
+            <span class="match-badge">100%</span>
           </div>
         </div>
-      ` : `<div class="hint-strip mt-3"><span>◆</span><span>No matching entries found in the index for this trait combination.</span></div>`}
+      ` : `<div class="hint-strip mt-3"><span>◆</span><span>No exact matching entries found in the index for this trait combination.</span></div>`}
 
       ${others.length > 0 ? `
         <div class="mt-4">
-          <p class="text-xs mb-2" style="color:var(--paper-dim)">Other matches (${result.matches.length - 1} more):</p>
+          <p class="text-xs mb-2" style="color:var(--paper-dim)">Other exact matches (${result.matches.length - 1} more):</p>
           <div class="order-chip-row mt-2">
-            ${others.map(m => `<span class="order-chip" style="border-color:var(--teal);color:var(--teal)">#${escapeHtml(m.nft.token_id ?? m.nft.id ?? '?')} · ${m.matchCount}/${m.totalTraits}</span>`).join('')}
+            ${others.map(m => `<span class="order-chip" style="border-color:var(--teal);color:var(--teal)">#${escapeHtml(m.nft.token_id ?? m.nft.id ?? '?')} · 100%</span>`).join('')}
             ${result.matches.length > 10 ? `<span class="text-xs" style="color:var(--paper-dim)">+${result.matches.length - 10} more</span>` : ''}
           </div>
         </div>
@@ -1441,7 +1420,7 @@ async function deleteNFT(id){
 }
 
 // Bulk delete of every NFT that has an EXACT 100% index match, in one click.
-// NFTs matched at 99% or lower are left alone on purpose.
+// NFTs with no match are left alone on purpose.
 async function deleteAllMatched(){
   const matched = nfts.filter(n => n.matchedTokenId && n.matchPercentage === 100);
   if(matched.length === 0){ showToast('No 100% matches to delete'); return; }
