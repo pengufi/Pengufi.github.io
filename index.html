@@ -705,9 +705,9 @@ function getTraitMap(nft){
   return map;
 }
 
-// Core matcher: walks every trait_type (folder) for the candidate NFT, skips any
-// trait whose value is "None", and compares the remaining trait_type/value pairs
-// against every entry in the loaded index.json.
+// Core matcher: an index entry only counts as a "match" if EVERY trait_type
+// (all 11 sections, including the ones that are "None") is IDENTICAL between
+// the composed NFT and the index entry. No partial / percentage matches.
 function matchNFTWithIndex(selectedLayers){
   if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None' };
 
@@ -715,6 +715,24 @@ function matchNFTWithIndex(selectedLayers){
   for(const layer of selectedLayers){
     if(TRAIT_SECTIONS.includes(layer.section)) traitMap[layer.section] = layer.value;
   }
+  // Full trait set for the candidate, filling in "None" for anything not selected.
+  const fullTraits = TRAIT_SECTIONS.map(section => [section, traitMap[section] ?? 'None']);
+  const totalTraits = fullTraits.filter(([, v]) => v !== 'None').length;
+
+  const results = [];
+  for(const nft of indexData){
+    const nftTraits = getTraitMap(nft);
+    // Exact match = every single trait_type lines up, "None" included.
+    const isExactMatch = fullTraits.every(([trait, value]) => (nftTraits[trait] ?? 'None') === value);
+    if(isExactMatch){
+      results.push({ nft, matchCount: totalTraits, totalTraits, matchPercentage: 100 });
+    }
+  }
+
+  const bestMatch = results.length > 0 ? results[0] : null;
+  const bestTokenId = bestMatch ? (bestMatch.nft.token_id ?? bestMatch.nft.id ?? 'Unknown') : 'None';
+  return { matches: results, matchCount: results.length, bestMatch, bestTokenId };
+}
   // Walk ALL trait_types, but only keep the ones that actually have a value (skip "None").
   const chosenTraits = TRAIT_SECTIONS
     .filter(section => traitMap[section] !== undefined && traitMap[section] !== 'None')
