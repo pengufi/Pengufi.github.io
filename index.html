@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>Registry — Trait Compositor & Index Matcher</title>
+<title>deblav · Trait Compositor & Index Matcher</title>
 <!-- Firebase SDKs v9 compat -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -286,6 +286,11 @@
   .trait-table td:last-child{font-weight:600;color:var(--amber2);text-align:right;}
   .trait-table td.none-val{color:var(--paper-dim);font-weight:400;}
   .modal-actions{display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--line);}
+
+  .search-wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .search-wrap .field{flex:1;min-width:160px;}
+  .search-clear{background:transparent;border:none;color:var(--paper-dim);cursor:pointer;padding:4px 6px;font-size:13px;}
+  .search-clear:hover{color:var(--paper);}
 </style>
 </head>
 <body>
@@ -294,8 +299,8 @@
     <div class="brand">
       <div class="mark"></div>
       <div>
-        <h1 class="disp">REGISTRY</h1>
-        <div class="sub">Trait Compositor · Firebase</div>
+        <h1 class="disp">DEBLAV</h1>
+        <div class="sub">pixel art · internet slang · compositor</div>
       </div>
     </div>
     <span class="mono text-xs" style="color:var(--paper-dim)">PNG · SVG · IDX MATCH</span>
@@ -381,8 +386,8 @@
       </div>
 
       <div class="mt-4 space-y-3">
-        <input type="text" id="nft-name" value="V2 Dickbutts" class="field" placeholder="Collection name">
-        <textarea id="nft-description" rows="3" class="field" placeholder="Description">crypto Dickbutts V2 — art community driven.</textarea>
+        <input type="text" id="nft-name" value="deblav" class="field" placeholder="Collection name">
+        <textarea id="nft-description" rows="3" class="field" placeholder="Description">pixel art lover — internet slang style. deblav remix.</textarea>
       </div>
 
       <button id="btn-create-nft" class="btn btn-amber btn-block btn-big mt-4">Generate NFT</button>
@@ -395,10 +400,10 @@
           <span>Background + Skin are drawn on every NFT. Every other trait rolls its own independent rarity — Shoes 77%, Hat 66%, Body 65%, Hand 44%, Dick 33%, Eyes 12%, Mouth 3%, Butt 2%, Nose 0.5%, Special 0.4% — with a safety ceiling of 7–8 total attributes per NFT. Each result is checked against the loaded index. Very large batches (thousands) use a lot of browser memory — start smaller if your browser struggles.</span>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
-          <input type="number" id="batch-count" class="field" min="1" max="10000" value="100" style="flex:1;min-width:120px">
-          <input type="text" id="batch-name" class="field" placeholder="Base name" value="V2 Dickbutt" style="flex:2;min-width:160px">
+          <input type="number" id="batch-count" class="field" min="1" max="10500" value="100" style="flex:1;min-width:120px">
+          <input type="text" id="batch-name" class="field" placeholder="Base name" value="deblav" style="flex:2;min-width:160px">
         </div>
-        <button id="btn-batch-generate" class="btn btn-amber btn-block btn-big mt-3">Generate batch (up to 10,000)</button>
+        <button id="btn-batch-generate" class="btn btn-amber btn-block btn-big mt-3">Generate batch (up to 10,500)</button>
         <div id="batch-progress" class="mt-3 hidden">
           <div class="flex-between">
             <span class="text-xs mono" id="batch-progress-label">0 / 0</span>
@@ -420,8 +425,14 @@
             <button id="btn-dl-all-images" class="btn btn-outline">⇩ Images (ZIP)</button>
             <button id="btn-dl-all-json" class="btn btn-outline">⇩ Metadata (ZIP)</button>
             <button id="btn-delete-matched" class="btn btn-danger">Delete 100% matches</button>
+            <button id="btn-delete-all" class="btn btn-danger">Delete all</button>
           </div>
         </div>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="search-layer-input" class="field" placeholder="Search by layer name (e.g. Hat, Eyes, Special…)">
+        <button id="btn-search-layer" class="btn btn-outline">Search</button>
+        <button id="btn-clear-search" class="btn btn-outline">Clear</button>
       </div>
       <div id="nft-list" class="nft-grid"></div>
       <div id="nft-empty" class="empty-state hidden"><span class="big">◇</span>No NFTs generated yet.</div>
@@ -493,6 +504,7 @@ const db = firebase.database();
 // CONFIG
 // ============================================================
 const INDEX_URL = 'https://raw.githubusercontent.com/pengufi/Pengufi.github.io/main/index_clean.json';
+const IMAGE_CID = 'QmcENAp9JpEpA**asVve4oCsYbev56HNHD2BgLjE';
 
 // Fixed stacking order used for compositing AND for the display order of
 // selected layers. Background is drawn first (bottom), Special last (top).
@@ -501,17 +513,9 @@ const SECTIONS = LAYER_ORDER;
 // Trait sections that appear in generated metadata (everything except Background).
 const TRAIT_SECTIONS = LAYER_ORDER.filter(s => s !== 'Background');
 
-// ---- TUNE THESE TO CHANGE RARITY ----
-// Background is always drawn but is NOT a trait_type / not counted toward the
-// attribute cap below (it's just the canvas backdrop).
-// Every other value below is that section's OWN INDEPENDENT probability
-// (0 to 1) of getting a layer on any given generated NFT — Skin's is 1.0 so
-// it's effectively always present. These do NOT need to add up to anything;
-// each section is rolled separately, so e.g. Nose really does stay "None"
-// on roughly 99.5% of NFTs.
 const BATCH_INCLUDE_CHANCE = {
-  Background: 1.0,   // always drawn, excluded from the attribute cap
-  Skin: 1.0,          // effectively always included
+  Background: 1.0,
+  Skin: 1.0,
   Body: 0.75,
   Hat: 0.91,
   Eyes: 0.12,
@@ -524,11 +528,6 @@ const BATCH_INCLUDE_CHANCE = {
   Special: 0.004
 };
 
-// Safety ceiling only (not a target): if an unusually large number of the
-// independent rolls above all hit on the same NFT, the total real attributes
-// (excluding Background) gets randomly trimmed back down to 7 or 8 so no NFT
-// ends up wearing every layer at once. Skin is never trimmed. Raise/lower
-// these two numbers to change that ceiling.
 const ATTRIBUTE_COUNT_MIN = 7;
 const ATTRIBUTE_COUNT_MAX = 8;
 
@@ -546,9 +545,9 @@ let indexData = [];
 let isIndexLoading = false;
 let previewCanvas = null, previewCtx = null;
 let isBatchRunning = false;
+let searchTerm = '';
 
-// Cache of decoded <img> elements keyed by their data-URL / URL source, so batch
-// generation of thousands of NFTs doesn't re-decode the same PNG/SVG every time.
+// Cache of decoded <img> elements keyed by their data-URL / URL source.
 const imageCache = new Map();
 
 // ============================================================
@@ -628,9 +627,6 @@ async function loadAllNftsFromFirebase(){
   }
 }
 
-// Only single, manually-created NFTs are persisted to Firebase. Large batch runs
-// (hundreds/thousands of base64 images) would blow past Realtime Database limits,
-// so batch results stay in local browser memory and can be exported as ZIPs instead.
 async function saveNftToFirebase(nft){
   await fbNftRef(nft.id).set(nft);
   const idsSnap = await fbNftIdsRef().once('value');
@@ -693,8 +689,6 @@ async function clearIndex(){
   showToast('Index cleared');
 }
 
-// Builds a { trait_type: value } map for ONE index entry, across every trait
-// section (all folders), so comparisons always walk the full trait_type set.
 function getTraitMap(nft){
   const map = {};
   if(nft && Array.isArray(nft.attributes)){
@@ -705,24 +699,8 @@ function getTraitMap(nft){
   return map;
 }
 
-// Normalizes a trait value for comparison: trims stray whitespace and
-// ignores case, so "Trainers", " Trainers " and "trainers" all count as the
-// same value. This does NOT forgive genuine spelling differences (e.g.
-// "Trainers" vs "Trianers") — those still need to be fixed at the source.
 function normalizeVal(v){ return String(v ?? 'None').trim().toLowerCase(); }
 
-// ---------------------------------------------------------------
-// Core matcher: an index entry only counts as a "match" if EVERY trait_type
-// (all 11 sections, INCLUDING the ones that are "None") is IDENTICAL
-// (case/whitespace-insensitive) between the composed NFT and the index
-// entry. Partial matches are never surfaced as "matches" — either it's a
-// full 100% match or it doesn't appear in results.
-//
-// For diagnostics, we also track the single "closest" entry (highest
-// trait overlap) even when nothing hits 100%, along with exactly which
-// trait_types differ and how — this is what gets shown in the UI so you
-// can see WHY something isn't matching instead of guessing.
-// ---------------------------------------------------------------
 function matchNFTWithIndex(selectedLayers){
   if(!indexData || indexData.length === 0) return { matches: [], matchCount: 0, bestMatch: null, bestTokenId: 'None', closest: null };
 
@@ -730,14 +708,11 @@ function matchNFTWithIndex(selectedLayers){
   for(const layer of selectedLayers){
     if(TRAIT_SECTIONS.includes(layer.section)) traitMap[layer.section] = layer.value;
   }
-  // Full trait set for the candidate NFT, filling in "None" for any section
-  // that has nothing selected — this mirrors exactly what buildAttributes()
-  // will end up writing into the NFT's metadata.
   const fullTraits = TRAIT_SECTIONS.map(section => [section, traitMap[section] ?? 'None']);
   const totalTraits = fullTraits.filter(([, v]) => v !== 'None').length;
 
   const results = [];
-  let closest = null; // best partial match, kept only for the "no match" diagnostic
+  let closest = null;
 
   for(const nft of indexData){
     const nftTraits = getTraitMap(nft);
@@ -845,8 +820,6 @@ function loadImg(src){
   });
 }
 
-// Cached image loader — batch generation reuses the same uploaded layer many
-// times, so we decode each source image once and keep the <img> around.
 function getCachedImage(src){
   if(imageCache.has(src)) return imageCache.get(src);
   const p = loadImg(src);
@@ -1094,9 +1067,6 @@ function renderCreateSections(){
   updateOrderPreview();
 }
 
-// Selecting/deselecting a layer always re-sorts the selection into the fixed
-// LAYER_ORDER (Background → Skin → Body → Hat → Eyes → Mouth → Nose → Hand →
-// Shoes → Butt → Dick → Special) regardless of the order the user clicked in.
 function selectLayer(section, layerId, value, imageUrl, gender){
   const existingIndex = selectedOrder.findIndex(item => item.section === section);
   if(existingIndex !== -1 && String(selectedOrder[existingIndex].layerId) === String(layerId)){
@@ -1123,11 +1093,8 @@ function updateOrderPreview(){
 }
 
 // ============================================================
-// ATTRIBUTES BUILDER (shared by single + batch creation)
+// ATTRIBUTES BUILDER
 // ============================================================
-// Every trait_type (folder) is always present. If a folder has no layer
-// selected for this NFT, its value is "None" — the folder name itself never
-// changes. No "Attribute Count" entry is included.
 function buildAttributes(orderedSelection){
   const valueBySection = {};
   for(const item of orderedSelection){
@@ -1144,7 +1111,7 @@ function buildAttributes(orderedSelection){
 // ============================================================
 async function createNFT(){
   if(selectedOrder.length === 0){ showToast('Select at least one layer'); return; }
-  const name = document.getElementById('nft-name').value.trim() || 'V2 Dickbutts';
+  const name = document.getElementById('nft-name').value.trim() || 'deblav';
   const description = document.getElementById('nft-description').value.trim();
   const btn = document.getElementById('btn-create-nft');
   const originalLabel = btn.textContent;
@@ -1183,7 +1150,7 @@ async function createNFT(){
 }
 
 // ============================================================
-// BATCH NFT GENERATION (up to 10,000)
+// BATCH NFT GENERATION (up to 10,500)
 // ============================================================
 function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -1197,30 +1164,15 @@ function shuffleInPlace(arr){
   return arr;
 }
 
-// Builds one random, fully-ordered layer selection following LAYER_ORDER.
-//
-// Each section (other than Background) rolls its OWN independent chance from
-// BATCH_INCLUDE_CHANCE — this is what keeps rarities honest (e.g. Nose really
-// does end up "None" about 99.5% of the time, Special about 99.6%, etc).
-// Background is always drawn but is never counted as an attribute. Skin's
-// chance is 1.0, so it's effectively always included.
-//
-// ATTRIBUTE_COUNT_MIN/MAX is a CEILING, not a target: most NFTs will land
-// well under it naturally (the independent rolls above average out to well
-// below 7-8). On the rare NFT where an unusually large number of independent
-// rolls all hit at once, we randomly trim back down to 7 or 8 attributes
-// (Skin is protected and never trimmed) so no NFT ends up wearing every layer.
 function randomSelection(){
   const picks = [];
 
-  // Background: always drawn, never counted as an attribute slot.
   const bgLayers = layersBySection['Background'] || [];
   if(bgLayers.length > 0){
     const layer = pickRandom(bgLayers);
     picks.push({ section: 'Background', layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
   }
 
-  // Every other section rolls its own independent chance.
   for(const section of LAYER_ORDER){
     if(section === 'Background') continue;
     const layers = layersBySection[section] || [];
@@ -1232,7 +1184,6 @@ function randomSelection(){
     }
   }
 
-  // Enforce the max-attribute ceiling (Background excluded from the count).
   const cap = randomIntInclusive(ATTRIBUTE_COUNT_MIN, ATTRIBUTE_COUNT_MAX);
   const bgPick = picks.find(p => p.section === 'Background');
   let traitPicks = picks.filter(p => p.section !== 'Background');
@@ -1269,8 +1220,8 @@ async function generateBatch(){
   if(!hasAnyLayers){ showToast('Upload some layers first'); return; }
 
   let count = parseInt(document.getElementById('batch-count').value, 10) || 0;
-  count = Math.max(1, Math.min(10000, count));
-  const baseName = document.getElementById('batch-name').value.trim() || 'V2 Dickbutt';
+  count = Math.max(1, Math.min(10500, count));
+  const baseName = document.getElementById('batch-name').value.trim() || 'deblav';
 
   if(count > 2000){
     showToast('Large batch — this may take a while and use a lot of memory');
@@ -1296,8 +1247,6 @@ async function generateBatch(){
       let orderedSelection = null;
       let attributes = null;
       let attempts = 0;
-      // Try a few times to avoid exact duplicate trait combos; give up and
-      // accept a duplicate if the layer pool is too small to avoid one.
       do{
         orderedSelection = randomSelection();
         attributes = buildAttributes(orderedSelection);
@@ -1305,7 +1254,6 @@ async function generateBatch(){
       } while(seenSignatures.has(attributeSignature(attributes)) && attempts < 20);
 
       if(orderedSelection.length === 0){
-        // No layers landed for this NFT at all (unlucky rolls) — skip this slot.
         continue;
       }
 
@@ -1332,7 +1280,6 @@ async function generateBatch(){
       if(created % 25 === 0 || created === count){
         setBatchProgressUI(true, created, count);
         renderCollection();
-        // Yield to the browser so the progress bar/UI stays responsive.
         await new Promise(r => setTimeout(r, 0));
       }
     }
@@ -1352,21 +1299,37 @@ async function generateBatch(){
 }
 
 // ============================================================
-// COLLECTION
+// COLLECTION with SEARCH and DELETE ALL
 // ============================================================
 function renderCollection(){
   const container = document.getElementById('nft-list');
   const empty = document.getElementById('nft-empty');
   const countEl = document.getElementById('collection-count');
   if(!container) return;
+
+  let filtered = nfts;
+  if(searchTerm.trim() !== ''){
+    const term = searchTerm.trim().toLowerCase();
+    filtered = nfts.filter(n => {
+      return n.attributes.some(a => a.value.toLowerCase().includes(term));
+    });
+  }
+
   if(countEl) countEl.textContent = nfts.length;
   empty.classList.toggle('hidden', nfts.length > 0);
   if(nfts.length === 0){ container.innerHTML = ''; return; }
 
-  container.innerHTML = nfts.map((nft, idx) => `
+  if(filtered.length === 0){
+    container.innerHTML = '<div class="empty-state"><span class="big">◇</span>No NFTs match your search.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map((nft, idx) => {
+    const seq = nfts.indexOf(nft) + 1;
+    return `
     <div class="nft-card fade-in" data-view-nft="${nft.id}">
       <div class="img-wrap">
-        <span class="seq-tag">#${idx + 1}</span>
+        <span class="seq-tag">#${seq}</span>
         <img src="${nft.image}">
       </div>
       <div class="body">
@@ -1380,7 +1343,7 @@ function renderCollection(){
         </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 
   container.querySelectorAll('[data-view-nft]').forEach(el => {
     el.addEventListener('click', e => {
@@ -1393,13 +1356,16 @@ function renderCollection(){
   container.querySelectorAll('[data-del-nft]').forEach(el => el.addEventListener('click', () => deleteNFT(el.dataset.delNft)));
 }
 
-function nftMetadataObject(nft){
-  return { name: nft.name, description: nft.description, image: 'ipfs://placeholder', attributes: nft.attributes };
+function nftMetadataObject(nft, seq){
+  const imageUrl = `ipfs://${IMAGE_CID}/${seq}.png`;
+  return { name: nft.name, description: nft.description, image: imageUrl, attributes: nft.attributes };
 }
 
 function viewMetadata(id){
   const nft = nfts.find(n => n.id == id);
   if(!nft) return;
+  const seq = nfts.indexOf(nft) + 1;
+  const metadata = nftMetadataObject(nft, seq);
 
   document.getElementById('modal-title').textContent = nft.name;
   const traits = nft.attributes;
@@ -1407,6 +1373,7 @@ function viewMetadata(id){
   document.getElementById('modal-body').innerHTML = `
     <div class="modal-img-wrap"><img src="${nft.image}"></div>
     ${nft.description ? `<p class="modal-desc">${escapeHtml(nft.description)}</p>` : ''}
+    <div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Image CID:</b> ${IMAGE_CID}/${seq}.png</span></div>
     ${nft.matchedTokenId
       ? `<div class="hint-strip mt-2" style="margin-bottom:14px"><span>◆</span><span><b>Matches token</b> #${escapeHtml(nft.matchedTokenId)} <span style="color:var(--paper-dim)">(${nft.matchPercentage}% trait match)</span></span></div>`
       : (nft.closest
@@ -1429,10 +1396,11 @@ function closeMetadataModal(){
 function downloadJSON(id){
   const nft = nfts.find(n => n.id == id);
   if(!nft) return;
-  const metadata = nftMetadataObject(nft);
+  const seq = nfts.indexOf(nft) + 1;
+  const metadata = nftMetadataObject(nft, seq);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' }));
-  a.download = `${nft.name.replace(/[^a-z0-9]/gi, '_')}.json`;
+  a.download = `${seq}.json`;
   a.click();
   showToast('JSON downloaded');
 }
@@ -1440,9 +1408,10 @@ function downloadJSON(id){
 function downloadImage(id){
   const nft = nfts.find(n => n.id == id);
   if(!nft) return;
+  const seq = nfts.indexOf(nft) + 1;
   const a = document.createElement('a');
   a.href = nft.image;
-  a.download = `${nft.name.replace(/[^a-z0-9]/gi, '_')}.png`;
+  a.download = `${seq}.png`;
   a.click();
   showToast('Image downloaded');
 }
@@ -1455,8 +1424,21 @@ async function deleteNFT(id){
   showToast('NFT deleted');
 }
 
-// Bulk delete of every NFT that has an EXACT 100% index match, in one click.
-// NFTs with no match are left alone on purpose.
+async function deleteAllNFTs(){
+  if(nfts.length === 0){ showToast('No NFTs to delete'); return; }
+  if(!confirm(`Delete all ${nfts.length} NFT(s)? This cannot be undone.`)) return;
+  const ids = nfts.map(n => n.id);
+  nfts = [];
+  renderCollection();
+  try{
+    const updates = {};
+    ids.forEach(id => { updates['nfts/' + id] = null; });
+    if(Object.keys(updates).length > 0) await db.ref().update(updates);
+    await fbNftIdsRef().set([]);
+  }catch(e){}
+  showToast('All NFTs deleted');
+}
+
 async function deleteAllMatched(){
   const matched = nfts.filter(n => n.matchedTokenId && n.matchPercentage === 100);
   if(matched.length === 0){ showToast('No 100% matches to delete'); return; }
@@ -1474,14 +1456,12 @@ async function deleteAllMatched(){
     let ids = idsSnap.val() || [];
     ids = ids.filter(i => !matchedIds.has(i));
     await fbNftIdsRef().set(ids);
-  }catch(e){
-    // Batch-generated NFTs were never in Firebase to begin with — safe to ignore.
-  }
+  }catch(e){}
   showToast(`${matched.length} NFT(s) with a 100% match deleted`);
 }
 
 // ============================================================
-// ZIP EXPORTS — sequential numbering (1, 2, 3, …) shared by images & metadata
+// ZIP EXPORTS — sequential numbering
 // ============================================================
 async function downloadAllImagesZip(){
   if(nfts.length === 0){ showToast('No NFTs to download'); return; }
@@ -1511,7 +1491,9 @@ async function downloadAllMetadataZip(){
   try{
     const zip = new JSZip();
     nfts.forEach((nft, idx) => {
-      zip.file(`${idx + 1}.json`, JSON.stringify(nftMetadataObject(nft), null, 2));
+      const seq = idx + 1;
+      const metadata = nftMetadataObject(nft, seq);
+      zip.file(`${seq}.json`, JSON.stringify(metadata, null, 2));
     });
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a');
@@ -1522,6 +1504,21 @@ async function downloadAllMetadataZip(){
   }catch(err){
     showToast(`Zip error: ${err.message}`);
   }
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+function performSearch(){
+  const input = document.getElementById('search-layer-input');
+  searchTerm = input.value.trim();
+  renderCollection();
+}
+
+function clearSearch(){
+  document.getElementById('search-layer-input').value = '';
+  searchTerm = '';
+  renderCollection();
 }
 
 // ============================================================
@@ -1586,6 +1583,7 @@ document.getElementById('btn-clear-index').addEventListener('click', clearIndex)
 document.getElementById('btn-dl-all-images').addEventListener('click', downloadAllImagesZip);
 document.getElementById('btn-dl-all-json').addEventListener('click', downloadAllMetadataZip);
 document.getElementById('btn-delete-matched').addEventListener('click', deleteAllMatched);
+document.getElementById('btn-delete-all').addEventListener('click', deleteAllNFTs);
 document.getElementById('modal-close-btn').addEventListener('click', closeMetadataModal);
 document.getElementById('metadata-modal').addEventListener('click', e => {
   if(e.target.id === 'metadata-modal') closeMetadataModal();
@@ -1593,13 +1591,19 @@ document.getElementById('metadata-modal').addEventListener('click', e => {
 document.getElementById('modal-copy-json').addEventListener('click', async () => {
   const nft = window._currentModalNft;
   if(!nft) return;
-  const metadata = nftMetadataObject(nft);
+  const seq = nfts.indexOf(nft) + 1;
+  const metadata = nftMetadataObject(nft, seq);
   try{
     await navigator.clipboard.writeText(JSON.stringify(metadata, null, 2));
     showToast('JSON copied to clipboard');
   }catch(e){
     showToast('Could not copy — try the Download JSON button instead');
   }
+});
+document.getElementById('btn-search-layer').addEventListener('click', performSearch);
+document.getElementById('btn-clear-search').addEventListener('click', clearSearch);
+document.getElementById('search-layer-input').addEventListener('keydown', e => {
+  if(e.key === 'Enter') performSearch();
 });
 
 window.App = { switchTab };
