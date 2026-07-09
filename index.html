@@ -534,15 +534,15 @@ const SKIN_RARITY_WEIGHTS = {
 const BATCH_INCLUDE_CHANCE = {
   Background: 1.0,
   Skin: 1.0,        // always included, but the specific skin is chosen by SKIN_RARITY_WEIGHTS
-  Body: 0.87,
+  Body: 0.75,
   Hat: 0.91,
-  Eyes: 1.1,
+  Eyes: 0.12,
   Mouth: 0.03,
   Nose: 0.005,
   Shoes: 0.77,
-  Butt: 0.01,
-  Dick: 0.1,
-  Hand: 0.13,
+  Butt: 0.02,
+  Dick: 0.33,
+  Hand: 0.54,
   Special: 0.004
 };
 
@@ -1168,7 +1168,7 @@ async function createNFT(){
 }
 
 // ============================================================
-// BATCH NFT GENERATION (up to 10,500) with SKIN RARITY
+// BATCH NFT GENERATION (up to 10,500) with SKIN RARITY — SPREAD OUT RARITIES
 // ============================================================
 function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -1185,10 +1185,9 @@ function shuffleInPlace(arr){
 // Weighted random pick based on SKIN_RARITY_WEIGHTS
 function pickSkinLayer(skinLayers){
   if(!skinLayers || skinLayers.length === 0) return null;
-  // Build a weighted list of skin layers
   const weighted = [];
   for(const layer of skinLayers){
-    const weight = SKIN_RARITY_WEIGHTS[layer.value] || 0.1; // fallback
+    const weight = SKIN_RARITY_WEIGHTS[layer.value] || 0.1;
     weighted.push({ layer, weight });
   }
   const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
@@ -1200,7 +1199,50 @@ function pickSkinLayer(skinLayers){
   return weighted[weighted.length - 1].layer;
 }
 
-function randomSelection(){
+// Generate a shuffled array of skin layers with exact proportional distribution.
+// This ensures that across the entire batch, each skin appears at its exact rarity,
+// and they are spread randomly throughout the batch (not clumped at the beginning).
+function generateShuffledSkinSequence(skinLayers, totalCount){
+  if(!skinLayers || skinLayers.length === 0) return [];
+  
+  // Calculate exact counts per skin based on weights
+  const weighted = [];
+  for(const layer of skinLayers){
+    const weight = SKIN_RARITY_WEIGHTS[layer.value] || 0.1;
+    weighted.push({ layer, weight });
+  }
+  const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+  
+  const sequence = [];
+  for(const entry of weighted){
+    const count = Math.round((entry.weight / totalWeight) * totalCount);
+    for(let i = 0; i < count; i++){
+      sequence.push(entry.layer);
+    }
+  }
+  
+  // If we have fewer than totalCount, pad with the most common skin (highest weight)
+  while(sequence.length < totalCount){
+    const maxWeight = Math.max(...weighted.map(w => w.weight));
+    const candidates = weighted.filter(w => w.weight === maxWeight);
+    sequence.push(pickRandom(candidates).layer);
+  }
+  
+  // If we have more than totalCount, trim from the least rare
+  while(sequence.length > totalCount){
+    const minWeight = Math.min(...weighted.map(w => w.weight));
+    const candidates = weighted.filter(w => w.weight === minWeight);
+    const toRemove = candidates[0];
+    const idx = sequence.lastIndexOf(toRemove.layer);
+    if(idx !== -1) sequence.splice(idx, 1);
+    else sequence.pop();
+  }
+  
+  // Shuffle the sequence so rarities are spread out randomly
+  return shuffleInPlace(sequence);
+}
+
+function randomSelectionWithSpread(skinSequence, index){
   const picks = [];
 
   // Background: always drawn
@@ -1210,9 +1252,15 @@ function randomSelection(){
     picks.push({ section: 'Background', layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
   }
 
-  // Skin: always drawn, but pick using SKIN_RARITY_WEIGHTS
-  const skinLayers = layersBySection['Skin'] || [];
-  if(skinLayers.length > 0){
+  // Skin: use the pre-shuffled sequence
+  if(skinSequence && skinSequence.length > 0){
+    const skinLayer = skinSequence[index % skinSequence.length];
+    if(skinLayer){
+      picks.push({ section: 'Skin', layerId: skinLayer.id, value: skinLayer.value, imageUrl: skinLayer.imageUrl, gender: skinLayer.gender });
+    }
+  } else {
+    // Fallback: weighted random
+    const skinLayers = layersBySection['Skin'] || [];
     const skinLayer = pickSkinLayer(skinLayers);
     if(skinLayer){
       picks.push({ section: 'Skin', layerId: skinLayer.id, value: skinLayer.value, imageUrl: skinLayer.imageUrl, gender: skinLayer.gender });
@@ -1237,7 +1285,6 @@ function randomSelection(){
   let traitPicks = picks.filter(p => p.section !== 'Background');
 
   if(traitPicks.length > cap){
-    // Skin is mandatory (always keep it)
     const mandatory = traitPicks.filter(p => p.section === 'Skin');
     let optional = shuffleInPlace(traitPicks.filter(p => p.section !== 'Skin'));
     const keepCount = Math.max(0, cap - mandatory.length);
@@ -1287,6 +1334,10 @@ async function generateBatch(){
   canvas.width = 512; canvas.height = 512;
   const ctx = canvas.getContext('2d');
 
+  // Pre-generate a shuffled sequence of skin layers for the entire batch
+  const skinLayers = layersBySection['Skin'] || [];
+  const skinSequence = generateShuffledSkinSequence(skinLayers, count);
+
   const seenSignatures = new Set(nfts.map(n => attributeSignature(n.attributes)));
   const startIndex = nfts.length;
   let created = 0;
@@ -1297,7 +1348,7 @@ async function generateBatch(){
       let attributes = null;
       let attempts = 0;
       do{
-        orderedSelection = randomSelection();
+        orderedSelection = randomSelectionWithSpread(skinSequence, i);
         attributes = buildAttributes(orderedSelection);
         attempts++;
       } while(seenSignatures.has(attributeSignature(attributes)) && attempts < 20);
