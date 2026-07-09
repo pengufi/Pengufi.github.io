@@ -513,9 +513,27 @@ const SECTIONS = LAYER_ORDER;
 // Trait sections that appear in generated metadata (everything except Background).
 const TRAIT_SECTIONS = LAYER_ORDER.filter(s => s !== 'Background');
 
+// Skin layers have their own rarity weights. This maps the layer VALUE (name) to a relative weight.
+// During batch generation, Skin is rolled separately — Skin is always included
+// (Skin inclusion chance = 1.0), and then we pick a specific Skin layer based on these weights.
+const SKIN_RARITY_WEIGHTS = {
+  'Alien': 0.5,
+  'Zombie': 1.6,
+  'Ape': 1.2,
+  'Rainbow': 0.1,
+  'Robo': 0.1,
+  'Skeleton': 0.03,
+  'Vampire': 0.8,
+  'Dark': 2.5,
+  'Light': 2.5,
+  'Mid': 2.5,
+  'Ghost': 0.9
+};
+
+// Other sections use these independent chances.
 const BATCH_INCLUDE_CHANCE = {
   Background: 1.0,
-  Skin: 1.0,
+  Skin: 1.0,        // always included, but the specific skin is chosen by SKIN_RARITY_WEIGHTS
   Body: 0.75,
   Hat: 0.91,
   Eyes: 0.12,
@@ -1150,7 +1168,7 @@ async function createNFT(){
 }
 
 // ============================================================
-// BATCH NFT GENERATION (up to 10,500)
+// BATCH NFT GENERATION (up to 10,500) with SKIN RARITY
 // ============================================================
 function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -1164,17 +1182,46 @@ function shuffleInPlace(arr){
   return arr;
 }
 
+// Weighted random pick based on SKIN_RARITY_WEIGHTS
+function pickSkinLayer(skinLayers){
+  if(!skinLayers || skinLayers.length === 0) return null;
+  // Build a weighted list of skin layers
+  const weighted = [];
+  for(const layer of skinLayers){
+    const weight = SKIN_RARITY_WEIGHTS[layer.value] || 0.1; // fallback
+    weighted.push({ layer, weight });
+  }
+  const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+  let rand = Math.random() * totalWeight;
+  for(const entry of weighted){
+    rand -= entry.weight;
+    if(rand <= 0) return entry.layer;
+  }
+  return weighted[weighted.length - 1].layer;
+}
+
 function randomSelection(){
   const picks = [];
 
+  // Background: always drawn
   const bgLayers = layersBySection['Background'] || [];
   if(bgLayers.length > 0){
     const layer = pickRandom(bgLayers);
     picks.push({ section: 'Background', layerId: layer.id, value: layer.value, imageUrl: layer.imageUrl, gender: layer.gender });
   }
 
+  // Skin: always drawn, but pick using SKIN_RARITY_WEIGHTS
+  const skinLayers = layersBySection['Skin'] || [];
+  if(skinLayers.length > 0){
+    const skinLayer = pickSkinLayer(skinLayers);
+    if(skinLayer){
+      picks.push({ section: 'Skin', layerId: skinLayer.id, value: skinLayer.value, imageUrl: skinLayer.imageUrl, gender: skinLayer.gender });
+    }
+  }
+
+  // Other sections: independent chance rolls
   for(const section of LAYER_ORDER){
-    if(section === 'Background') continue;
+    if(section === 'Background' || section === 'Skin') continue;
     const layers = layersBySection[section] || [];
     if(layers.length === 0) continue;
     const chance = BATCH_INCLUDE_CHANCE[section] ?? 0.1;
@@ -1184,11 +1231,13 @@ function randomSelection(){
     }
   }
 
+  // Safety ceiling: cap total attributes (excluding Background)
   const cap = randomIntInclusive(ATTRIBUTE_COUNT_MIN, ATTRIBUTE_COUNT_MAX);
   const bgPick = picks.find(p => p.section === 'Background');
   let traitPicks = picks.filter(p => p.section !== 'Background');
 
   if(traitPicks.length > cap){
+    // Skin is mandatory (always keep it)
     const mandatory = traitPicks.filter(p => p.section === 'Skin');
     let optional = shuffleInPlace(traitPicks.filter(p => p.section !== 'Skin'));
     const keepCount = Math.max(0, cap - mandatory.length);
